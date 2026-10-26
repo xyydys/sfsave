@@ -64,10 +64,10 @@
       "color": "#576B95",
       "weight": "medium",
       "canvas": [24, 24],
-      "padding": 0.04,
+      "box": [3, 3, 18, 18],
       "scales": [1, 2, 3],
       "formats": ["png", "svg"],
-      "note": "单个图标可以覆盖 defaults 里的任何字段"
+      "note": "单个图标可以覆盖 defaults 里的任何字段；box 指定图形在画布里的位置和大小"
     }
   ]
 }

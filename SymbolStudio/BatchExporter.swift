@@ -101,7 +101,7 @@ enum BatchExporter {
                     }
                     let layout = SVGWriter.layout(for: render.drawing, frame: render.frame,
                                                   width: icon.canvas.width, height: icon.canvas.height,
-                                                  padding: icon.padding, fit: icon.fit)
+                                                  padding: icon.padding, fit: icon.fit, box: icon.box)
 
                     if formats.contains(.png) {
                         for scale in icon.scales {

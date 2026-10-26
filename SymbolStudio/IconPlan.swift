@@ -138,6 +138,8 @@ struct PlanStyle: Decodable {
     /// Width and height in points.
     var canvas: [Double]?
     var padding: Double?
+    /// x, y, width, height in canvas points; replaces padding.
+    var box: [Double]?
     var fit: String?
     var scales: [Int]?
     var formats: [String]?
@@ -147,12 +149,12 @@ struct PlanStyle: Decodable {
 
     fileprivate static let known: Set<String> = [
         "mode", "weight", "scale", "pointSize", "variableValue", "gradient", "colors", "color",
-        "light", "dark", "canvas", "padding", "fit", "scales", "formats", "appearances", "background"
+        "light", "dark", "canvas", "padding", "box", "fit", "scales", "formats", "appearances", "background"
     ]
 
     private enum CodingKeys: String, CodingKey {
         case mode, weight, scale, pointSize, variableValue, gradient, colors, color
-        case light, dark, canvas, padding, fit, scales, formats, appearances, background
+        case light, dark, canvas, padding, box, fit, scales, formats, appearances, background
     }
 
     init(from decoder: Decoder) throws {
@@ -168,6 +170,7 @@ struct PlanStyle: Decodable {
         dark = try Self.strings(c, .dark)
         canvas = try Self.numbers(c, .canvas)
         padding = try c.decodeIfPresent(Double.self, forKey: .padding)
+        box = try c.decodeIfPresent([Double].self, forKey: .box)
         fit = try c.decodeIfPresent(String.self, forKey: .fit)
         scales = try c.decodeIfPresent([Int].self, forKey: .scales)
         formats = try Self.strings(c, .formats)
@@ -235,6 +238,7 @@ struct ResolvedIcon: Identifiable {
     var appearances: [AppearanceChoice]
     var canvas: CGSize
     var padding: Double
+    var box: CGRect?
     var fit: IconFit
     var scales: [Int]
     var formats: [PlanFormat]
@@ -375,6 +379,17 @@ extension IconPlan {
                 warn(label, "padding 要在 0 到 0.45 之间，已调整。")
                 padding = min(max(padding, 0), 0.45)
             }
+            var box: CGRect?
+            if let values = pick(\.box) {
+                if values.count == 4, values[2] > 0, values[3] > 0 {
+                    box = CGRect(x: values[0], y: values[1], width: values[2], height: values[3])
+                    if let rect = box, !CGRect(origin: .zero, size: canvas).insetBy(dx: -0.01, dy: -0.01).contains(rect) {
+                        warn(label, "box 超出了画布，超出的部分会被裁掉。")
+                    }
+                } else {
+                    fail("box 要写成 [x, y, 宽, 高]（单位：点），宽和高要大于 0。")
+                }
+            }
             var pointSize = pick(\.pointSize) ?? (fit == .natural ? 24 : 64)
             if !(4...512).contains(pointSize) {
                 warn(label, "pointSize 要在 4 到 512 之间，已调整。")
@@ -449,7 +464,7 @@ extension IconPlan {
             let item = ResolvedIcon(index: index, names: names, symbol: symbol, mode: mode, weight: weight,
                                     scale: scaleChoice, pointSize: pointSize, gradient: gradient,
                                     variableValue: variable, colors: colors, appearances: appearances,
-                                    canvas: canvas, padding: padding, fit: fit, scales: scales,
+                                    canvas: canvas, padding: padding, box: box, fit: fit, scales: scales,
                                     formats: formats, background: background, note: icon.note)
 
             let paths = item.outputPaths(naming, formats: Set(formats), includeDark: true)

@@ -59,6 +59,7 @@ manifest.json          （每个文件的路径、符号、外观、像素尺寸
 | `gradient` | 渐变（需要 iOS 26） |
 | `weight` / `scale` / `pointSize` / `variableValue` | 粗细、比例、字号、可变值 |
 | `canvas` / `padding` / `fit` | 画布 `[宽, 高]`（点）、四周留白（0–0.45）、`contain` 或 `natural` |
+| `box` | `[x, y, 宽, 高]`（点）：把图形放进画布里的这个矩形并居中，代替 `padding`。替换现有图标时，填原图内容所在的矩形，新图标就和原图对齐 |
 | `scales` / `formats` / `appearances` | 倍率如 `[2, 3]`、`png` / `svg`、`light` / `dark` |
 | `background` | 背景色，默认透明 |
 | `output` | `darkSuffix`（默认 `_dark`）、`darkFolder`、`scaleSuffix`（默认 `@{n}x`）、`svgFolder`（默认 `svg`） |

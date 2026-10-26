@@ -23,7 +23,7 @@ SYSTEM_COLORS = {'red', 'orange', 'yellow', 'green', 'mint', 'teal', 'cyan', 'bl
                  'pink', 'brown', 'white', 'gray', 'black', 'primary', 'secondary', 'tertiary',
                  'quaternary', 'accent'}
 STYLE_KEYS = {'mode', 'weight', 'scale', 'pointSize', 'variableValue', 'gradient', 'colors', 'color', 'light',
-              'dark', 'canvas', 'padding', 'fit', 'scales', 'formats', 'appearances', 'background'}
+              'dark', 'canvas', 'padding', 'box', 'fit', 'scales', 'formats', 'appearances', 'background'}
 ICON_KEYS = {'file', 'aliases', 'symbol', 'note'} | STYLE_KEYS
 ROOT_KEYS = {'version', 'name', 'defaults', 'output', 'icons'}
 OUTPUT_KEYS = {'darkSuffix', 'darkFolder', 'scaleSuffix', 'svgFolder'}
@@ -127,6 +127,16 @@ def check(plan, catalog_names):
             sides = as_list(canvas)
             if len(sides) not in (1, 2) or not all(isinstance(v, (int, float)) and 1 <= v <= 2048 for v in sides):
                 err(where, 'canvas 要写成 [宽, 高]，每边 1 到 2048 点')
+        box = pick('box')
+        if box is not None:
+            if not (isinstance(box, list) and len(box) == 4 and all(isinstance(v, (int, float)) for v in box)
+                    and box[2] > 0 and box[3] > 0):
+                err(where, 'box 要写成 [x, y, 宽, 高]，宽和高要大于 0')
+            elif canvas is not None:
+                sides = as_list(canvas)
+                cw, ch = (sides[0], sides[0]) if len(sides) == 1 else (sides + [sides[0]])[:2]
+                if box[0] < -0.01 or box[1] < -0.01 or box[0] + box[2] > cw + 0.01 or box[1] + box[3] > ch + 0.01:
+                    warn(where, 'box 超出了画布')
         padding = pick('padding')
         if padding is not None and not 0 <= padding <= 0.45:
             warn(where, 'padding 要在 0 到 0.45 之间')
