@@ -30,7 +30,8 @@ enum SVGWriter {
     }
 
     static func svg(_ drawing: VectorDrawing, layout: SVGLayout, title: String, background: RGBA?) -> String {
-        var writer = Writer(drawing: drawing, transform: layout.transform)
+        let slug = title.lowercased().map { $0.isASCII && ($0.isLetter || $0.isNumber) ? String($0) : "-" }.joined()
+        var writer = Writer(drawing: drawing, transform: layout.transform, prefix: slug.isEmpty ? "" : slug + "-")
         let width = svgNumber(layout.width), height = svgNumber(layout.height)
         writer.lines.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
         writer.lines.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"\(width)\" height=\"\(height)\" viewBox=\"0 0 \(width) \(height)\">")
@@ -48,15 +49,18 @@ enum SVGWriter {
     private struct Writer {
         let drawing: VectorDrawing
         let transform: CGAffineTransform
+        /// Keeps IDs unique when several exported files are inlined in one page.
+        let prefix: String
         var lines: [String] = []
 
         private var usedClips = Set<String>()
         private var usedGradients = Set<String>()
         private var usedMasks = Set<String>()
 
-        init(drawing: VectorDrawing, transform: CGAffineTransform) {
+        init(drawing: VectorDrawing, transform: CGAffineTransform, prefix: String) {
             self.drawing = drawing
             self.transform = transform
+            self.prefix = prefix
             collect(drawing.nodes)
         }
 
@@ -96,13 +100,13 @@ enum SVGWriter {
                 writeGradient(id, gradient)
             }
             for (id, clip) in drawing.clips.filter({ usedClips.contains($0.key) }).sorted(by: { $0.value.index < $1.value.index }) {
-                let parent = clip.parent.map { " clip-path=\"url(#\($0))\"" } ?? ""
+                let parent = clip.parent.map { " clip-path=\"url(#\(prefix + $0))\"" } ?? ""
                 let rule = clip.evenOdd ? " clip-rule=\"evenodd\"" : ""
-                lines.append("    <clipPath id=\"\(id)\" clipPathUnits=\"userSpaceOnUse\"\(parent)><path d=\"\(pathData(clip.path))\"\(rule)/></clipPath>")
+                lines.append("    <clipPath id=\"\(prefix + id)\" clipPathUnits=\"userSpaceOnUse\"\(parent)><path d=\"\(pathData(clip.path))\"\(rule)/></clipPath>")
             }
             for (id, mask) in drawing.masks.filter({ usedMasks.contains($0.key) }).sorted(by: { $0.value.index < $1.value.index }) {
                 let type = mask.alpha ? " style=\"mask-type:alpha\"" : ""
-                lines.append("    <mask id=\"\(id)\" maskUnits=\"userSpaceOnUse\" x=\"\(svgNumber(maskRegion.minX))\" y=\"\(svgNumber(maskRegion.minY))\" width=\"\(svgNumber(maskRegion.width))\" height=\"\(svgNumber(maskRegion.height))\"\(type)>")
+                lines.append("    <mask id=\"\(prefix + id)\" maskUnits=\"userSpaceOnUse\" x=\"\(svgNumber(maskRegion.minX))\" y=\"\(svgNumber(maskRegion.minY))\" width=\"\(svgNumber(maskRegion.width))\" height=\"\(svgNumber(maskRegion.height))\"\(type)>")
                 if let backdrop = mask.backdrop {
                     lines.append("      <rect x=\"\(svgNumber(maskRegion.minX))\" y=\"\(svgNumber(maskRegion.minY))\" width=\"\(svgNumber(maskRegion.width))\" height=\"\(svgNumber(maskRegion.height))\" fill=\"\(backdrop.hex)\"/>")
                 }
@@ -137,7 +141,7 @@ enum SVGWriter {
                 }
             }
             let tag = gradient.radial ? "radialGradient" : "linearGradient"
-            lines.append("    <\(tag) id=\"\(id)\" gradientUnits=\"userSpaceOnUse\" \(attributes)>")
+            lines.append("    <\(tag) id=\"\(prefix + id)\" gradientUnits=\"userSpaceOnUse\" \(attributes)>")
             for stop in gradient.stops {
                 lines.append("      <stop offset=\"\(svgNumber(stop.offset))\" stop-color=\"\(stop.color.hex)\"/>")
             }
@@ -151,8 +155,8 @@ enum SVGWriter {
                     lines.append(indent + shapeElement(shape))
                 case .group(let group):
                     var attributes = opacityAttr("opacity", group.opacity)
-                    if let clip = group.clipID { attributes += " clip-path=\"url(#\(clip))\"" }
-                    if let mask = group.maskID { attributes += " mask=\"url(#\(mask))\"" }
+                    if let clip = group.clipID { attributes += " clip-path=\"url(#\(prefix + clip))\"" }
+                    if let mask = group.maskID { attributes += " mask=\"url(#\(prefix + mask))\"" }
                     lines.append(indent + "<g\(attributes)>")
                     write(group.children, indent: indent + "  ")
                     lines.append(indent + "</g>")
@@ -167,7 +171,7 @@ enum SVGWriter {
                 attributes += " fill=\"\(color.hex)\"" + opacityAttr("fill-opacity", shape.fillOpacity * color.alpha)
                 if shape.evenOdd { attributes += " fill-rule=\"evenodd\"" }
             case .gradient(let id)?:
-                attributes += " fill=\"url(#\(id))\"" + opacityAttr("fill-opacity", shape.fillOpacity)
+                attributes += " fill=\"url(#\(prefix + id))\"" + opacityAttr("fill-opacity", shape.fillOpacity)
                 if shape.evenOdd { attributes += " fill-rule=\"evenodd\"" }
             case nil:
                 attributes += " fill=\"none\""
@@ -181,8 +185,8 @@ enum SVGWriter {
                 if shape.lineJoin == 1 { attributes += " stroke-linejoin=\"round\"" }
                 if shape.lineJoin == 2 { attributes += " stroke-linejoin=\"bevel\"" }
             }
-            if let clip = shape.clipID { attributes += " clip-path=\"url(#\(clip))\"" }
-            if let mask = shape.maskID { attributes += " mask=\"url(#\(mask))\"" }
+            if let clip = shape.clipID { attributes += " clip-path=\"url(#\(prefix + clip))\"" }
+            if let mask = shape.maskID { attributes += " mask=\"url(#\(prefix + mask))\"" }
             return "<path \(attributes)/>"
         }
 
