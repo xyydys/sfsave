@@ -405,7 +405,7 @@ final class PDFVectorExtractor {
         case "ICCBased":
             var streamRef: CGPDFStreamRef?
             guard CGPDFArrayGetStream(array, 1, &streamRef), let stream = streamRef else { return .rgb }
-            let key = Int(bitPattern: stream)
+            let key = unsafeBitCast(stream, to: Int.self)
             if let cached = iccCache[key] { return cached }
             var count: CGPDFInteger = 3
             if let dict = CGPDFStreamGetDictionary(stream) { _ = CGPDFDictionaryGetInteger(dict, "N", &count) }
@@ -807,8 +807,10 @@ private enum PDFFunction {
             guard CGPDFDictionaryGetArray(dict, "Functions", &listRef), let list = listRef,
                   let functions = PDFFunction.functions(in: list), !functions.isEmpty else { return nil }
             let bounds = numberArray(dict, "Bounds") ?? []
-            let encode = numberArray(dict, "Encode")
-                ?? Array(repeating: [CGFloat(0), 1], count: functions.count).flatMap { $0 }
+            var encode: [CGFloat] = numberArray(dict, "Encode") ?? []
+            if encode.isEmpty {
+                for _ in functions { encode += [0, 1] }
+            }
             guard bounds.count == functions.count - 1, encode.count >= functions.count * 2 else { return nil }
             self = .stitching(domain: domain, functions: functions, bounds: bounds, encode: encode)
         case 0:
