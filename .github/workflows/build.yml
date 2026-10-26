@@ -1,0 +1,21 @@
+name: Build SymbolStudio
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build device app and unsigned IPA
+        run: bash build.sh device
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SymbolStudio-0.1.0-unsigned
+          path: build/SymbolStudio_0.1.0_unsigned.ipa
+          if-no-files-found: error
