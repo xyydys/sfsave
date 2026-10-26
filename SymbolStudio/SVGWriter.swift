@@ -103,6 +103,9 @@ enum SVGWriter {
             for (id, mask) in drawing.masks.filter({ usedMasks.contains($0.key) }).sorted(by: { $0.value.index < $1.value.index }) {
                 let type = mask.alpha ? " style=\"mask-type:alpha\"" : ""
                 lines.append("    <mask id=\"\(id)\" maskUnits=\"userSpaceOnUse\" x=\"\(svgNumber(maskRegion.minX))\" y=\"\(svgNumber(maskRegion.minY))\" width=\"\(svgNumber(maskRegion.width))\" height=\"\(svgNumber(maskRegion.height))\"\(type)>")
+                if let backdrop = mask.backdrop {
+                    lines.append("      <rect x=\"\(svgNumber(maskRegion.minX))\" y=\"\(svgNumber(maskRegion.minY))\" width=\"\(svgNumber(maskRegion.width))\" height=\"\(svgNumber(maskRegion.height))\" fill=\"\(backdrop.hex)\"/>")
+                }
                 write(mask.children, indent: "      ")
                 lines.append("    </mask>")
             }

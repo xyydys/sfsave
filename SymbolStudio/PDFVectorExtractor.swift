@@ -104,7 +104,8 @@ final class PDFVectorExtractor {
 
         drawing.nodes = prune(outputs.first ?? [])
         for (id, mask) in drawing.masks {
-            drawing.masks[id] = VectorMask(index: mask.index, alpha: mask.alpha, children: prune(mask.children))
+            drawing.masks[id] = VectorMask(index: mask.index, alpha: mask.alpha, backdrop: mask.backdrop,
+                                           children: prune(mask.children))
         }
     }
 
@@ -564,8 +565,15 @@ final class PDFVectorExtractor {
         runForm(group, groupDict, parent: scanner, initial: inner)
         let children = outputs.removeLast()
         maskDepth -= 1
+        let alpha = dictName(dict, "S") == "Alpha"
+        var backdrop: RGBA?
+        if !alpha, let components = numberArray(dict, "BC"), !components.isEmpty {
+            let space: ColorSpace = components.count == 1 ? .gray : (components.count == 4 ? .cmyk : .rgb)
+            let color = convert(components, space)
+            if color.red + color.green + color.blue > 0 { backdrop = color }
+        }
         let id = makeID("mask")
-        drawing.masks[id] = VectorMask(index: nextIndex, alpha: dictName(dict, "S") == "Alpha", children: children)
+        drawing.masks[id] = VectorMask(index: nextIndex, alpha: alpha, backdrop: backdrop, children: children)
         return id
     }
 

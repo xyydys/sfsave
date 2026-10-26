@@ -85,13 +85,15 @@ enum SymbolPipeline {
         var captured = capture(name, style, engine)
         var extracted = captured.flatMap { PDFVectorExtractor.extract(pdf: $0.pdf) }
 
-        if engine == .swiftUI, extracted.map({ $0.isEmpty || $0.isIncomplete }) ?? true,
-           let fallback = capture(name, style, .uiKit),
-           let fallbackDrawing = PDFVectorExtractor.extract(pdf: fallback.pdf), !fallbackDrawing.isEmpty {
+        let other: RenderEngine = engine == .swiftUI ? .uiKit : .swiftUI
+        if extracted.map({ $0.isEmpty || $0.isIncomplete }) ?? true,
+           let fallback = capture(name, style, other),
+           let fallbackDrawing = PDFVectorExtractor.extract(pdf: fallback.pdf),
+           !fallbackDrawing.isEmpty, !fallbackDrawing.isIncomplete {
             captured = fallback
             extracted = fallbackDrawing
-            engine = .uiKit
-            notes.append("SwiftUI 的渲染结果不是纯矢量，已自动改用 UIKit 引擎。")
+            notes.append("\(engine.title) 引擎没有得到纯矢量结果，已自动改用 \(other.title) 引擎。")
+            engine = other
         }
         guard let result = captured, let drawing = extracted, !drawing.isEmpty else { return nil }
 
@@ -100,6 +102,11 @@ enum SymbolPipeline {
                                 background: options.transparentBackground ? nil : options.background)
         return RenderOutput(pdf: result.pdf, frame: result.frame, drawing: drawing, layout: layout,
                             svg: svg, engine: engine, notes: notes)
+    }
+
+    /// The raw PDF an engine produced, for diagnostics.
+    static func capturedPDF(name: String, style: SymbolStyle, engine: RenderEngine) -> Data? {
+        capture(name, style, engine)?.pdf
     }
 
     private static func capture(_ name: String, _ style: SymbolStyle, _ engine: RenderEngine) -> Capture? {

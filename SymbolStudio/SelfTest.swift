@@ -66,11 +66,27 @@ enum SelfTest {
             guard let output = SymbolPipeline.render(name: test.name, style: test.style, options: options) else {
                 print("RESULT failed")
                 failures += 1
+                if let pdf = SymbolPipeline.capturedPDF(name: test.name, style: test.style, engine: test.engine) {
+                    let drawing = PDFVectorExtractor.extract(pdf: pdf)
+                    print("CAPTURE bytes=\(pdf.count) shapes=\(drawing?.shapeCount ?? -1) raster=\(drawing?.rasterImages ?? -1) text=\(drawing?.textRuns ?? -1) warnings=\(drawing?.warnings ?? [])")
+                    print("PDF-BEGIN")
+                    print(contentDump(pdf))
+                    print("PDF-END")
+                } else {
+                    print("CAPTURE none")
+                }
                 continue
             }
             let drawing = output.drawing
             print("RESULT ok engine=\(output.engine.rawValue) shapes=\(drawing.shapeCount) gradients=\(drawing.gradients.count) masks=\(drawing.masks.count) clips=\(drawing.clips.count) raster=\(drawing.rasterImages) text=\(drawing.textRuns) page=\(drawing.pageSize) bounds=\(drawing.bounds) frame=\(output.frame)")
             for note in output.notes + drawing.warnings { print("WARNING \(note)") }
+            if output.engine != test.engine, let pdf = SymbolPipeline.capturedPDF(name: test.name, style: test.style, engine: test.engine) {
+                let requested = PDFVectorExtractor.extract(pdf: pdf)
+                print("FALLBACK from \(test.engine.rawValue): bytes=\(pdf.count) shapes=\(requested?.shapeCount ?? -1) raster=\(requested?.rasterImages ?? -1) text=\(requested?.textRuns ?? -1)")
+                print("PDF-BEGIN")
+                print(contentDump(pdf))
+                print("PDF-END")
+            }
             print("SVG-BEGIN")
             print(output.svg, terminator: "")
             print("SVG-END")

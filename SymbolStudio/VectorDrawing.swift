@@ -94,5 +94,9 @@ struct VectorMask {
     let index: Int
     /// Alpha mask when true, luminosity mask otherwise.
     let alpha: Bool
+    /// Luminosity masks start from this color (PDF `BC`) instead of black.
+    /// The system draws "clear behind" layers as black shapes on a white
+    /// backdrop, so without it the masked layer disappears entirely.
+    let backdrop: RGBA?
     let children: [VectorNode]
 }
