@@ -43,13 +43,6 @@ final class PDFVectorExtractor {
         }
     }
 
-    private struct LastClip {
-        let id: String
-        let path: CGPath
-        let evenOdd: Bool
-        let parent: String?
-    }
-
     private struct GState {
         var ctm = CGAffineTransform.identity
         var fillSpace = ColorSpace.gray
@@ -63,7 +56,6 @@ final class PDFVectorExtractor {
         var lineCap = 0
         var lineJoin = 0
         var clipID: String?
-        var lastClip: LastClip?
         var maskID: String?
     }
 
@@ -341,7 +333,6 @@ final class PDFVectorExtractor {
         if geometry.isRect(&rect), rect.insetBy(dx: -0.01, dy: -0.01).contains(pageRect) { return }
         let id = makeID("clip")
         drawing.clips[id] = VectorClip(index: nextIndex, path: geometry, evenOdd: evenOdd, parent: state.clipID)
-        state.lastClip = LastClip(id: id, path: geometry, evenOdd: evenOdd, parent: state.clipID)
         state.clipID = id
     }
 
@@ -465,14 +456,23 @@ final class PDFVectorExtractor {
               let object = CGPDFContentStreamGetResource(CGPDFScannerGetContentStream(scanner), "Shading", name)
         else { return }
         guard let id = addGradient(object, transform: state.ctm.concatenating(flip), scanner: scanner) else { return }
-        // `sh` paints the whole clip region. When the newest clip is a path,
-        // fill that path with the gradient instead of a clipped rectangle.
+        // `sh` paints the whole clip region. Fill the innermost clip path with
+        // the gradient instead of a clipped rectangle, skipping rectangular
+        // clips (frame bounds) that do not cut into the clip they sit on.
+        var clipID = state.clipID
+        while let id = clipID, let clip = drawing.clips[id], let parentID = clip.parent,
+              let parent = drawing.clips[parentID] {
+            var rect = CGRect.zero
+            guard clip.path.isRect(&rect),
+                  rect.insetBy(dx: -0.01, dy: -0.01).contains(parent.path.boundingBoxOfPath) else { break }
+            clipID = parentID
+        }
         let savedClip = state.clipID
         var shape: VectorShape
-        if let last = state.lastClip, last.id == state.clipID {
-            shape = VectorShape(path: last.path)
-            shape.evenOdd = last.evenOdd
-            state.clipID = last.parent
+        if let id = clipID, let clip = drawing.clips[id] {
+            shape = VectorShape(path: clip.path)
+            shape.evenOdd = clip.evenOdd
+            state.clipID = clip.parent
         } else {
             shape = VectorShape(path: CGPath(rect: pageRect, transform: nil))
         }
@@ -602,7 +602,6 @@ final class PDFVectorExtractor {
                 inner.strokeAlpha = 1
                 inner.maskID = nil
                 inner.clipID = nil
-                inner.lastClip = nil
                 outputs.append([])
                 runForm(stream, dict, parent: scanner, initial: inner)
                 let children = outputs.removeLast()

@@ -4,13 +4,15 @@ iPhone / iPad 原生 SwiftUI 应用：查找 SF Symbols，按系统的渲染方�
 
 ## 工作方式
 
-App 不内置任何图标图形。导出时让系统按所选样式绘制符号（与复制出去的 SwiftUI 代码完全相同），绘制进 PDF，再把 PDF 里的矢量路径转换成 SVG：
+App 不内置任何图标图形。导出时让 SwiftUI 按所选样式绘制符号（与复制出去的 SwiftUI 代码完全相同），绘制进 PDF，再把 PDF 里的矢量路径转换成 SVG：
 
 ```
 Image(systemName:) + 样式  →  ImageRenderer 绘制到 PDF  →  PDFVectorExtractor（CGPDFScanner）→  SVGWriter  →  .svg
 ```
 
 因此 SVG 里的分层、颜色、层级透明度、多色和渐变都来自系统本身，和当前 iOS 版本的符号一致，不需要随 App 打包 37 MB 的路径数据。
+
+系统用“软蒙版”实现徽标等图层的镂空（clear behind），转换时会写成 SVG `<mask>`。UIKit 把 `UIImage` 符号画进 PDF 时会变成位图，所以只用 SwiftUI 绘制。
 
 ## 功能
 
@@ -22,7 +24,7 @@ Image(systemName:) + 样式  →  ImageRenderer 绘制到 PDF  →  PDFVectorExt
 - 画布：原始尺寸（保留排版框，便于与文字对齐）或 16–2048 像素正方形画布，可调留白、透明或纯色背景
 - 预览可在“系统渲染”和“导出的 SVG”（用 WebKit 显示导出的文件本身）之间切换，用来核对转换结果
 - 保存 SVG 到“文件”、分享 SVG、导出 PNG、复制 SVG 源码、复制代码、保存配色
-- 高级：可切换 SwiftUI / UIKit 渲染引擎；可导出系统绘制的原始 PDF 用于排查问题
+- 高级：可导出系统绘制的原始 PDF，用于排查转换问题
 
 复制的 SwiftUI 代码示例：
 
@@ -65,7 +67,7 @@ Scripts/selftest.sh   # 在模拟器里跑渲染自检
 
 | 文件 | 作用 |
 | --- | --- |
-| `SymbolRenderer.swift` | `StyledSymbol` 视图、SwiftUI / UIKit 绘制到 PDF、PNG 导出 |
+| `SymbolRenderer.swift` | `StyledSymbol` 视图、SwiftUI 绘制到 PDF、PNG 导出 |
 | `PDFVectorExtractor.swift` | 用 CGPDFScanner 读取 PDF 的路径、颜色、透明度、裁剪、渐变、蒙版 |
 | `SVGWriter.swift` | 排版（原始尺寸 / 画布）并输出 SVG |
 | `CodeGenerator.swift` | 生成 SwiftUI、UIKit、Objective-C 代码 |

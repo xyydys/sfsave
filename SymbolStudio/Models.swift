@@ -330,20 +330,12 @@ struct SymbolStyle: Codable, Hashable, Sendable {
     }
 }
 
-enum RenderEngine: String, CaseIterable, Codable, Identifiable, Sendable {
-    case swiftUI, uiKit
-
-    var id: String { rawValue }
-    var title: String { self == .swiftUI ? "SwiftUI" : "UIKit" }
-}
-
 struct ExportOptions: Codable, Hashable, Sendable {
     /// Side of the square canvas in pixels; 0 keeps the symbol's own frame at its point size.
     var canvas = 256
     var padding: Double = 0.1
     var transparentBackground = true
     var background = RGBA.white
-    var engine = RenderEngine.swiftUI
 }
 
 struct SavedDesign: Codable, Identifiable {

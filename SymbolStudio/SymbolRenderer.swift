@@ -65,62 +65,29 @@ struct RenderOutput {
     let drawing: VectorDrawing
     let layout: SVGLayout
     let svg: String
-    let engine: RenderEngine
-    var notes: [String]
 }
 
-/// Lets the system draw the symbol into a PDF, then turns the PDF's vector
+/// Lets SwiftUI draw the symbol into a PDF, then turns the PDF's vector
 /// paths into SVG. Whatever the system draws (layers, palette colors,
 /// hierarchical opacity, multicolor, gradients) ends up in the file.
+///
+/// Only SwiftUI is used for drawing: a UIImage symbol drawn into a PDF
+/// context with UIKit comes out as an embedded bitmap, not as paths.
 @MainActor
 enum SymbolPipeline {
-    private struct Capture {
-        let pdf: Data
-        let frame: CGRect
-    }
-
     static func render(name: String, style: SymbolStyle, options: ExportOptions) -> RenderOutput? {
-        var engine = options.engine
-        var notes: [String] = []
-        var captured = capture(name, style, engine)
-        var extracted = captured.flatMap { PDFVectorExtractor.extract(pdf: $0.pdf) }
-
-        let other: RenderEngine = engine == .swiftUI ? .uiKit : .swiftUI
-        if extracted.map({ $0.isEmpty || $0.isIncomplete }) ?? true,
-           let fallback = capture(name, style, other),
-           let fallbackDrawing = PDFVectorExtractor.extract(pdf: fallback.pdf),
-           !fallbackDrawing.isEmpty, !fallbackDrawing.isIncomplete {
-            captured = fallback
-            extracted = fallbackDrawing
-            notes.append("\(engine.title) 引擎没有得到纯矢量结果，已自动改用 \(other.title) 引擎。")
-            engine = other
-        }
-        guard let result = captured, let drawing = extracted, !drawing.isEmpty else { return nil }
-
-        let layout = SVGWriter.layout(for: drawing, frame: result.frame, options: options)
+        guard let capture = capturePDF(name: name, style: style),
+              let drawing = PDFVectorExtractor.extract(pdf: capture.pdf), !drawing.isEmpty else { return nil }
+        let layout = SVGWriter.layout(for: drawing, frame: capture.frame, options: options)
         let svg = SVGWriter.svg(drawing, layout: layout, title: name,
                                 background: options.transparentBackground ? nil : options.background)
-        return RenderOutput(pdf: result.pdf, frame: result.frame, drawing: drawing, layout: layout,
-                            svg: svg, engine: engine, notes: notes)
+        return RenderOutput(pdf: capture.pdf, frame: capture.frame, drawing: drawing, layout: layout, svg: svg)
     }
 
-    /// The raw PDF an engine produced, for diagnostics.
-    static func capturedPDF(name: String, style: SymbolStyle, engine: RenderEngine) -> Data? {
-        capture(name, style, engine)?.pdf
-    }
-
-    private static func capture(_ name: String, _ style: SymbolStyle, _ engine: RenderEngine) -> Capture? {
-        switch engine {
-        case .swiftUI: return swiftUICapture(name, style)
-        case .uiKit: return uiKitCapture(name, style)
-        }
-    }
-
-    /// Room around the symbol so parts that overhang its frame are not clipped.
-    private static func margin(_ style: SymbolStyle) -> CGFloat { CGFloat(max(style.pointSize, 8)) }
-
-    private static func swiftUICapture(_ name: String, _ style: SymbolStyle) -> Capture? {
-        let inset = margin(style)
+    /// The symbol drawn into a one-page PDF, with its layout frame in page space.
+    static func capturePDF(name: String, style: SymbolStyle) -> (pdf: Data, frame: CGRect)? {
+        // Room around the symbol so parts that overhang its frame are not clipped.
+        let inset = CGFloat(max(style.pointSize, 8))
         let view = StyledSymbol(name: name, style: style)
             .padding(inset)
             .environment(\.colorScheme, style.appearance.colorScheme)
@@ -139,53 +106,7 @@ enum SymbolPipeline {
         }
         guard data.length > 0, pageSize.width > inset * 2, pageSize.height > inset * 2 else { return nil }
         let frame = CGRect(x: inset, y: inset, width: pageSize.width - inset * 2, height: pageSize.height - inset * 2)
-        return Capture(pdf: data as Data, frame: frame)
-    }
-
-    private static func uiKitCapture(_ name: String, _ style: SymbolStyle) -> Capture? {
-        guard let image = uiImage(name, style) else { return nil }
-        let inset = margin(style)
-        let size = image.size
-        let bounds = CGRect(x: 0, y: 0, width: size.width + inset * 2, height: size.height + inset * 2)
-        let traits = UITraitCollection(userInterfaceStyle: style.appearance.interfaceStyle)
-        let data = UIGraphicsPDFRenderer(bounds: bounds).pdfData { context in
-            context.beginPage()
-            traits.performAsCurrent { image.draw(at: CGPoint(x: inset, y: inset)) }
-        }
-        return Capture(pdf: data, frame: CGRect(x: inset, y: inset, width: size.width, height: size.height))
-    }
-
-    /// The symbol as the generated UIKit code builds it.
-    static func uiImage(_ name: String, _ style: SymbolStyle) -> UIImage? {
-        let traits = UITraitCollection(userInterfaceStyle: style.appearance.interfaceStyle)
-        let colors = style.activeColors.map { $0.uiColor.resolvedColor(with: traits) }
-        var configuration = UIImage.SymbolConfiguration(pointSize: CGFloat(style.pointSize),
-                                                        weight: style.weight.uiWeight,
-                                                        scale: style.scale.uiScale)
-        switch style.renderingMode {
-        case .monochrome:
-            configuration = configuration.applying(UIImage.SymbolConfiguration.preferringMonochrome())
-        case .hierarchical:
-            configuration = configuration.applying(UIImage.SymbolConfiguration(hierarchicalColor: colors[0]))
-        case .palette:
-            configuration = configuration.applying(UIImage.SymbolConfiguration(paletteColors: colors))
-        case .multicolor:
-            configuration = configuration.applying(UIImage.SymbolConfiguration.preferringMulticolor())
-        }
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *), style.gradient {
-            configuration = configuration.applying(UIImage.SymbolConfiguration(colorRenderingMode: .gradient))
-        }
-        #endif
-        let image = style.usesVariableValue
-            ? UIImage(systemName: name, variableValue: style.variableValue, configuration: configuration)
-            : UIImage(systemName: name, withConfiguration: configuration)
-        switch style.renderingMode {
-        case .monochrome, .multicolor:
-            return image?.withTintColor(colors[0], renderingMode: .alwaysOriginal)
-        case .hierarchical, .palette:
-            return image?.withRenderingMode(.alwaysOriginal)
-        }
+        return (data as Data, frame)
     }
 
     /// Rasterizes the captured PDF with the same layout as the SVG.

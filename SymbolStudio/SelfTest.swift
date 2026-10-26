@@ -13,7 +13,7 @@ enum SelfTest {
     private struct Case {
         let name: String
         var style = SymbolStyle()
-        var engine = RenderEngine.swiftUI
+        var canvas = 128
         var dumpPDF = false
     }
 
@@ -33,12 +33,12 @@ enum SelfTest {
         }
         return [
             Case(name: "xmark", style: style(.hierarchical, [.system(.secondary)]), dumpPDF: true),
-            Case(name: "xmark", style: style(.hierarchical, [.system(.secondary)]), engine: .uiKit, dumpPDF: true),
+            Case(name: "xmark", style: style(.hierarchical, [.system(.secondary)], appearance: .dark), canvas: 0),
             Case(name: "heart.fill", style: style(.monochrome, [.system(.red)])),
             Case(name: "heart.fill", style: style(.monochrome, [.system(.red)], gradient: true), dumpPDF: true),
             Case(name: "xmark.circle.fill", style: style(.hierarchical, [.system(.blue)]), dumpPDF: true),
             Case(name: "person.crop.circle.badge.plus", style: style(.palette, [.system(.blue), .system(.green)]), dumpPDF: true),
-            Case(name: "person.crop.circle.badge.plus", style: style(.palette, [.system(.blue), .system(.green)]), engine: .uiKit),
+            Case(name: "externaldrive.badge.checkmark", style: style(.hierarchical, [.system(.accent)], gradient: true, weight: .black)),
             Case(name: "person.3.sequence.fill", style: style(.palette, [.system(.red), .system(.orange), .system(.blue)], paletteCount: 3)),
             Case(name: "cloud.sun.rain.fill", style: style(.multicolor, [.system(.primary)]), dumpPDF: true),
             Case(name: "folder.badge.plus", style: style(.multicolor, [.system(.primary)])),
@@ -59,14 +59,13 @@ enum SelfTest {
         var failures = 0
         for (index, test) in cases.enumerated() {
             var options = ExportOptions()
-            options.canvas = 128
-            options.engine = test.engine
-            let label = "\(index)-\(test.name)-\(test.style.renderingMode.rawValue)-\(test.engine.rawValue)"
+            options.canvas = test.canvas
+            let label = "\(index)-\(test.name)-\(test.style.renderingMode.rawValue)"
             print("=== CASE \(label)")
             guard let output = SymbolPipeline.render(name: test.name, style: test.style, options: options) else {
                 print("RESULT failed")
                 failures += 1
-                if let pdf = SymbolPipeline.capturedPDF(name: test.name, style: test.style, engine: test.engine) {
+                if let pdf = SymbolPipeline.capturePDF(name: test.name, style: test.style)?.pdf {
                     let drawing = PDFVectorExtractor.extract(pdf: pdf)
                     print("CAPTURE bytes=\(pdf.count) shapes=\(drawing?.shapeCount ?? -1) raster=\(drawing?.rasterImages ?? -1) text=\(drawing?.textRuns ?? -1) warnings=\(drawing?.warnings ?? [])")
                     print("PDF-BEGIN")
@@ -78,15 +77,9 @@ enum SelfTest {
                 continue
             }
             let drawing = output.drawing
-            print("RESULT ok engine=\(output.engine.rawValue) shapes=\(drawing.shapeCount) gradients=\(drawing.gradients.count) masks=\(drawing.masks.count) clips=\(drawing.clips.count) raster=\(drawing.rasterImages) text=\(drawing.textRuns) page=\(drawing.pageSize) bounds=\(drawing.bounds) frame=\(output.frame)")
-            for note in output.notes + drawing.warnings { print("WARNING \(note)") }
-            if output.engine != test.engine, let pdf = SymbolPipeline.capturedPDF(name: test.name, style: test.style, engine: test.engine) {
-                let requested = PDFVectorExtractor.extract(pdf: pdf)
-                print("FALLBACK from \(test.engine.rawValue): bytes=\(pdf.count) shapes=\(requested?.shapeCount ?? -1) raster=\(requested?.rasterImages ?? -1) text=\(requested?.textRuns ?? -1)")
-                print("PDF-BEGIN")
-                print(contentDump(pdf))
-                print("PDF-END")
-            }
+            print("RESULT ok shapes=\(drawing.shapeCount) gradients=\(drawing.gradients.count) masks=\(drawing.masks.count) clips=\(drawing.clips.count) raster=\(drawing.rasterImages) text=\(drawing.textRuns) page=\(drawing.pageSize) bounds=\(drawing.bounds) frame=\(output.frame)")
+            for warning in drawing.warnings { print("WARNING \(warning)") }
+            if drawing.isIncomplete { failures += 1 }
             print("SVG-BEGIN")
             print(output.svg, terminator: "")
             print("SVG-END")
@@ -158,7 +151,9 @@ enum SelfTest {
                 guard CGPDFObjectGetValue(object, .stream, &streamRef), let stream = streamRef,
                       let dict = CGPDFStreamGetDictionary(stream) else { continue }
                 out.append("-- xobject \(name) depth \(depth): " + entries(dict).map { "\($0.0)=\(describe($0.1))" }.joined(separator: " "))
-                out.append(streamText(stream))
+                var subtype: UnsafePointer<CChar>?
+                let isImage = CGPDFDictionaryGetName(dict, "Subtype", &subtype) && subtype.map { String(cString: $0) } == "Image"
+                if !isImage { out.append(streamText(stream)) }
                 var inner: CGPDFDictionaryRef?
                 if CGPDFDictionaryGetDictionary(dict, "Resources", &inner), let inner {
                     dumpResources(inner, depth: depth + 1, into: &out)

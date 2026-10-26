@@ -144,7 +144,7 @@ struct EditorView: View {
         if let output {
             VStack(alignment: .leading, spacing: 4) {
                 Text(summary(output))
-                ForEach(output.notes + output.drawing.warnings, id: \.self) { warning in
+                ForEach(output.drawing.warnings, id: \.self) { warning in
                     Label(warning, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
                 }
             }
@@ -280,16 +280,13 @@ struct EditorView: View {
 
     private var advancedSection: some View {
         Section {
-            Picker("渲染引擎", selection: $options.engine) {
-                ForEach(RenderEngine.allCases) { Text($0.title).tag($0) }
-            }
             Button { share("pdf") } label: { Label("导出原始 PDF（排查问题用）", systemImage: "doc.richtext") }
                 .disabled(output == nil)
             Button { share("json") } label: { Label("导出配色 JSON", systemImage: "curlybraces") }
         } header: {
             Text("高级")
         } footer: {
-            Text("SwiftUI 引擎与复制的 SwiftUI 代码效果一致；UIKit 引擎对应 UIImage.SymbolConfiguration。如果“导出的 SVG”和“系统渲染”看起来不一样，请导出原始 PDF 反馈。")
+            Text("SVG 由复制出去的同一段 SwiftUI 代码绘制后转换而来。如果“导出的 SVG”和“系统渲染”看起来不一样，可以导出原始 PDF 用来排查。")
         }
     }
 
@@ -304,7 +301,6 @@ struct EditorView: View {
         if !output.drawing.gradients.isEmpty { parts.append("\(output.drawing.gradients.count) 个渐变") }
         if !output.drawing.masks.isEmpty { parts.append("\(output.drawing.masks.count) 个蒙版") }
         parts.append("\(SVGWriter.number(output.layout.width)) × \(SVGWriter.number(output.layout.height))")
-        parts.append("\(output.engine.title) 引擎")
         return "SVG：" + parts.joined(separator: " · ")
     }
 
