@@ -4,7 +4,6 @@ import UIKit
 @MainActor
 struct LibraryView: View {
     @EnvironmentObject private var store: StudioStore
-    @Environment(\.colorScheme) private var colorScheme
     @State private var query = ""
     @State private var scope = "all"
     @State private var showCategories = false
@@ -22,12 +21,9 @@ struct LibraryView: View {
         case "all": return "全部图标"
         case "favorites": return "我的收藏"
         case "recent": return "最近使用"
-        case "parts": return "可分部配色"
         default: return store.catalog?.categories.first { $0.id == scope }?.title ?? "全部图标"
         }
     }
-    private var ink: RGBA { colorScheme == .dark ? .white : .black }
-
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -79,7 +75,7 @@ struct LibraryView: View {
             List(matches) { item in
                 NavigationLink { EditorView(item: item) } label: {
                     HStack(spacing: 14) {
-                        SymbolThumbnail(name: item.name, color: ink).frame(width: 44, height: 44)
+                        SymbolGlyph(name: item.name, size: 24).frame(width: 44, height: 44)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item.name).font(.subheadline.weight(.semibold))
                             Text(item.keywords).font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -108,7 +104,7 @@ struct LibraryView: View {
 
     private func symbolCell(_ item: SymbolItem) -> some View {
         VStack(spacing: 10) {
-            SymbolThumbnail(name: item.name, color: ink).frame(width: 50, height: 50)
+            SymbolGlyph(name: item.name, size: 26).frame(width: 50, height: 50)
             Text(item.name).font(.system(size: 11, weight: .medium)).lineLimit(2)
                 .multilineTextAlignment(.center).frame(height: 29, alignment: .top)
         }
@@ -141,7 +137,6 @@ struct LibraryView: View {
                     scopeRow("all", "全部图标", "square.grid.2x2", store.catalog?.symbols.count ?? 0)
                     scopeRow("favorites", "我的收藏", "star", store.favorites.count)
                     scopeRow("recent", "最近使用", "clock", store.recent.count)
-                    scopeRow("parts", "可分部配色", "paintpalette", store.catalog?.symbols.filter { $0.partCount > 1 }.count ?? 0)
                 }
                 Section("分类") {
                     ForEach(store.catalog?.categories ?? []) { category in
@@ -181,7 +176,6 @@ struct LibraryView: View {
                     case "all": inScope = true
                     case "favorites": inScope = favorites.contains(item.name)
                     case "recent": inScope = recent.contains(item.name)
-                    case "parts": inScope = item.partCount > 1
                     default: inScope = item.categories.contains(selected)
                     }
                     return inScope && tokens.allSatisfy { item.searchableText.lowercased().contains($0) }
@@ -220,18 +214,20 @@ struct DesignsView: View {
             Group {
                 if store.designs.isEmpty {
                     StudioEmptyView(icon: "paintpalette", title: "保存喜欢的配色",
-                                    detail: "打开图标，调整颜色后点“保存配色”。这里会保留颜色、透明度、画布和留白。")
+                                    detail: "打开图标，调整颜色后点“保存配色”。这里会保留渲染模式、颜色、粗细和导出设置。")
                 } else {
                     List {
                         ForEach(store.designs) { design in
                             if let item = store.item(named: design.symbolName) {
                                 NavigationLink {
-                                    EditorView(item: item, initialStyle: design.style)
+                                    EditorView(item: item, style: design.style, options: design.options)
                                 } label: {
                                     HStack(spacing: 12) {
-                                        SymbolThumbnail(name: item.name, color: design.style.primary, savedStyle: design.style)
+                                        StyledSymbol(name: item.name, style: design.style, pointSize: 24)
+                                            .environment(\.colorScheme, design.style.appearance.colorScheme)
                                             .frame(width: 45, height: 45)
-                                            .background(Checkerboard()).clipShape(RoundedRectangle(cornerRadius: 9))
+                                            .background(design.style.appearance == .dark ? Color(white: 0.11) : Color.white)
+                                            .clipShape(RoundedRectangle(cornerRadius: 9))
                                         VStack(alignment: .leading, spacing: 4) {
                                             Text(design.title).font(.headline)
                                             Text(item.name).font(.caption).foregroundStyle(.secondary)
@@ -259,18 +255,17 @@ struct AboutView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("符号工坊 0.1.0") {
-                    Text("\(store.catalog?.symbols.count ?? 0) 个离线矢量图标")
-                    Text("搜索、自由配色、透明度、静态 SVG 与 PNG 导出。")
+                Section("符号工坊 0.2.0") {
+                    Text("当前系统可用 \(store.catalog?.symbols.count ?? 0) 个符号")
+                    Text("渲染模式、调色板、多色、渐变、九种粗细，导出 SVG / PNG，复制 SwiftUI、UIKit、Objective-C 代码。")
                 }
-                Section("这一版的图标") {
-                    Text("内置常规粗细（Regular）。分部配色按素材中保留的独立路径编辑；同一路径内的镂空保持完整。")
-                    Text("这是一份 SF Symbols 7 的资源快照，不承诺涵盖所有小版本、语言变体和粗细。")
+                Section("图标从哪里来") {
+                    Text("App 不内置图标图形。导出时由系统按所选样式绘制符号，再把绘制出的矢量路径转换成 SVG，所以结果与当前系统一致。")
+                    Text("搜索用的中文关键词和分类来自内置索引；索引里没有、但系统里有的新符号也会列出，只是没有关键词。")
                 }
-                Section("资源来源") {
-                    Link("SF Symbols 7 矢量资源", destination: URL(string: "https://github.com/001ProMax/SF-Symbol")!)
+                Section("许可") {
                     Link("Apple SF Symbols", destination: URL(string: "https://developer.apple.com/sf-symbols/")!)
-                    Text("SF Symbols 的图形权利属于 Apple，使用导出的素材仍需遵守 Apple 的许可。")
+                    Text("SF Symbols 的图形权利属于 Apple。导出的素材只适合用于 Apple 平台的设计与开发，并需遵守 Apple 的许可条款。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }

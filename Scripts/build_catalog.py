@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""Prepare bundled vector geometry from pinned SF Symbols SVG exports.
+"""Build Resources/catalog.json (names, categories, search keywords) from the
+Metadata folder inside the SF Symbols app.
 
-Dependencies: fonttools, lxml. Inputs are paths, never executed as code.
-All contours in one source <path> stay together, preserving holes.
+The app ships no glyph geometry: it lets the system draw each symbol at
+runtime. Running this script is only needed to refresh search keywords.
+
+Usage: build_catalog.py --metadata-dir "/Applications/SF Symbols.app/Contents/Resources/Metadata" \
+                        --output SymbolStudio/Resources
 """
 import argparse
 import collections
-import hashlib
 import json
 import pathlib
 import plistlib
 import re
-from lxml import etree
-from fontTools.svgLib.path import parse_path
-from fontTools.pens.recordingPen import RecordingPen
-from fontTools.pens.boundsPen import BoundsPen
 
 CATEGORY_NAMES = {
     'communication': '交流', 'weather': '天气', 'maps': '地图',
@@ -73,83 +72,33 @@ WORDS = {
 def dump(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
 
-def encode_path(d):
-    pen = RecordingPen(); parse_path(d, pen)
-    commands = []
-    for op, points in pen.value:
-        code, expected = {'moveTo': (0, 1), 'lineTo': (1, 1), 'curveTo': (2, 3),
-                          'qCurveTo': (3, 2), 'closePath': (4, 0)}[op]
-        assert len(points) == expected, (op, points)
-        commands.append(code)
-        for point in points:
-            commands.extend(round(float(v), 6) for v in point)
-    return commands
-
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--svg-dir', type=pathlib.Path, required=True)
     parser.add_argument('--metadata-dir', type=pathlib.Path, required=True)
     parser.add_argument('--output', type=pathlib.Path, required=True)
     args = parser.parse_args()
-    paths_dir = args.output / 'Glyphs'; paths_dir.mkdir(parents=True, exist_ok=True)
+    availability = plistlib.loads((args.metadata_dir / 'name_availability.plist').read_bytes())
     categories = plistlib.loads((args.metadata_dir / 'symbol_categories.plist').read_bytes())
     search = plistlib.loads((args.metadata_dir / 'symbol_search.plist').read_bytes())
     category_defs = plistlib.loads((args.metadata_dir / 'categories.plist').read_bytes())
     known_categories = {x['key']: x for x in category_defs if x['key'] in CATEGORY_NAMES}
-    entries = []; counts = collections.Counter(); alpha_parts = 0; empty_parts = 0; sha = hashlib.sha256()
-    parser_xml = etree.XMLParser(resolve_entities=False, no_network=True)
-    for file in sorted(args.svg_dir.glob('*.svg')):
-        raw = file.read_bytes(); sha.update(file.name.encode()); sha.update(raw)
-        root = etree.fromstring(raw, parser_xml); name = file.stem
-        box = list(map(float, root.attrib['viewBox'].split()))
-        assert box[2] > 0 and box[3] > 0
-        layers = []
-        for node in root.iter():
-            if not isinstance(node.tag, str): continue
-            tag = etree.QName(node).localname
-            assert tag in {'svg', 'g', 'rect', 'path'}, (file, tag)
-            if tag == 'rect':
-                assert float(node.get('opacity', '1')) == 0
-            if tag != 'path': continue
-            assert not node.get('transform') and not node.get('stroke')
-            d = node.attrib['d']
-            if not d.strip():
-                empty_parts += 1
-                continue
-            alpha = round(float(node.get('fill-opacity', '1')) / .85, 6)
-            assert 0 <= alpha <= 1
-            alpha_parts += alpha < 1
-            bounds = BoundsPen(None); parse_path(d, bounds)
-            if bounds.bounds:
-                x0, y0, x1, y1 = bounds.bounds
-                assert x0 >= box[0] - .02 and y0 >= box[1] - .02, (name, bounds.bounds, box)
-                assert x1 <= box[0]+box[2]+.02 and y1 <= box[1]+box[3]+.02, (name, bounds.bounds, box)
-            layers.append({'d': d, 'commands': encode_path(d), 'alpha': alpha})
-        assert layers
-        dump(paths_dir / (name + '.json'), {'viewBox': box, 'parts': layers})
+    entries = []; counts = collections.Counter()
+    for name in sorted(availability['symbols']):
         cats = [c for c in categories.get(name, []) if c in known_categories]
         counts.update(cats)
-        tokens = re.split(r'[.0-9]+', name)
         words = list(search.get(name, []))
-        for token in tokens:
+        for token in re.split(r'[.0-9]+', name):
             words.extend(WORDS.get(token, '').split())
         words.extend(CATEGORY_NAMES[c] for c in cats)
         if name == 'square.and.arrow.up': words += ['分享', '导出', '上传']
         if name == 'square.and.arrow.down': words += ['下载', '保存']
-        entries.append({'name': name, 'categories': cats,
-                        'keywords': ' '.join(dict.fromkeys(words)), 'partCount': len(layers)})
-    catalog = {'version': 'SF Symbols 7 SVG snapshot', 'weight': 'Regular',
-               'sourceCommit': 'ce617cfd9307067627789fda3a9900af5598b0fe',
+        entries.append({'name': name, 'categories': cats, 'keywords': ' '.join(dict.fromkeys(words))})
+    catalog = {'version': 'SF Symbols metadata',
                'categories': [{'id': c['key'], 'title': CATEGORY_NAMES[c['key']],
                                'icon': c['icon'], 'count': counts[c['key']]}
                               for c in category_defs if c['key'] in known_categories and counts[c['key']]],
                'symbols': entries}
     dump(args.output / 'catalog.json', catalog)
-    report = {'symbols': len(entries), 'multipartSymbols': sum(x['partCount'] > 1 for x in entries),
-              'parts': sum(x['partCount'] for x in entries), 'semiTransparentParts': alpha_parts,
-              'sourceFilesSHA256': sha.hexdigest(), 'geometryChecks': 'all paths parsed; holes kept; bounds checked',
-              'rasterImagesEmbedded': 0, 'externalReferences': 0, 'emptyPathsRemoved': empty_parts, 'weight': 'Regular'}
-    dump(args.output / 'resource-report.json', report)
-    print(json.dumps(report, indent=2, ensure_ascii=False))
+    print(f'{len(entries)} symbols, {len(catalog["categories"])} categories')
 
 if __name__ == '__main__': main()

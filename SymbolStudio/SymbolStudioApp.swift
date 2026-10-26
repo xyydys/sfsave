@@ -12,7 +12,10 @@ struct SymbolStudioApp: App {
             }
             .tint(Color(red: 0.10, green: 0.40, blue: 0.95))
             .environmentObject(store)
-            .task { await store.load() }
+            .task {
+                if SelfTest.isRequested { SelfTest.run() }
+                await store.load()
+            }
         }
     }
 }
