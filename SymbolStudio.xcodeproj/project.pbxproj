@@ -30,7 +30,7 @@
 		A9B3D4DA8EF1FB98AB2AD2A8 = { isa = PBXBuildFile; fileRef = ACE3BD67DAD1AFB529A3990B; };
 		83715D7FBFFAF5EA6C083331 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "VectorDrawing.swift"; sourceTree = "<group>"; };
 		74B038DA6F69F57C499AA413 = { isa = PBXBuildFile; fileRef = 83715D7FBFFAF5EA6C083331; };
-		71EFA36BC9775FD72DE8EC53 = { isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
+		71EFA36BC9775FD72DE8EC53 = { isa = PBXFileReference; lastKnownFileType = text.json; name = catalog.json; path = Resources/catalog.json; sourceTree = "<group>"; };
 		D2B95FB705A4AD50535A3D26 = { isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0721DFFAE4ECE7B8740729E1 = { isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DC62F6EDFCF365902C12F3A7 = { isa = PBXBuildFile; fileRef = 71EFA36BC9775FD72DE8EC53; };

@@ -30,8 +30,8 @@ final class StudioStore: ObservableObject {
     /// which names actually exist. Symbols the bundled list does not know about
     /// are added from the system's own name list when it can be read.
     nonisolated private static func loadCatalog() throws -> SymbolCatalog {
-        guard let url = Bundle.main.url(forResource: "catalog", withExtension: "json", subdirectory: "Resources")
-        else { throw StudioError.resource("缺少图标目录，请检查工程 Resources 文件夹是否随 App 打包。") }
+        guard let url = Bundle.main.url(forResource: "catalog", withExtension: "json")
+        else { throw StudioError.resource("缺少图标目录 catalog.json，请检查它是否随 App 打包。") }
         var catalog = try JSONDecoder().decode(SymbolCatalog.self, from: Data(contentsOf: url))
         catalog.symbols = catalog.symbols.filter { UIImage(systemName: $0.name) != nil }
         let known = Set(catalog.symbols.map(\.name))

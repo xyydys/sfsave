@@ -17,7 +17,10 @@ def main():
     for file in sources:
         add('ref-'+file.name, f'isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {quote(file.name)}; sourceTree = "<group>";')
         add('build-'+file.name, f'isa = PBXBuildFile; fileRef = {uid("ref-"+file.name)};')
-    add('resources-ref', 'isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>";')
+    # A top-level "Resources" folder in an iOS bundle makes CFBundle treat it as an
+    # old-style bundle and installation fails with "Missing bundle ID", so the
+    # catalog is copied as a single file to the bundle root instead.
+    add('resources-ref', 'isa = PBXFileReference; lastKnownFileType = text.json; name = catalog.json; path = Resources/catalog.json; sourceTree = "<group>";')
     add('assets-ref', 'isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>";')
     add('info-ref', 'isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>";')
     for name in ['resources', 'assets']:
