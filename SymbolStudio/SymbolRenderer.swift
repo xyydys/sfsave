@@ -75,9 +75,16 @@ struct RenderOutput {
 /// context with UIKit comes out as an embedded bitmap, not as paths.
 @MainActor
 enum SymbolPipeline {
-    static func render(name: String, style: SymbolStyle, options: ExportOptions) -> RenderOutput? {
+    /// The symbol drawn into a PDF and read back as vectors, before any layout.
+    static func renderDrawing(name: String, style: SymbolStyle) -> (pdf: Data, frame: CGRect, drawing: VectorDrawing)? {
         guard let capture = capturePDF(name: name, style: style),
               let drawing = PDFVectorExtractor.extract(pdf: capture.pdf), !drawing.isEmpty else { return nil }
+        return (capture.pdf, capture.frame, drawing)
+    }
+
+    static func render(name: String, style: SymbolStyle, options: ExportOptions) -> RenderOutput? {
+        guard let capture = renderDrawing(name: name, style: style) else { return nil }
+        let drawing = capture.drawing
         let layout = SVGWriter.layout(for: drawing, frame: capture.frame, options: options)
         let svg = SVGWriter.svg(drawing, layout: layout, title: name,
                                 background: options.transparentBackground ? nil : options.background)
@@ -111,24 +118,30 @@ enum SymbolPipeline {
 
     /// Rasterizes the captured PDF with the same layout as the SVG.
     static func png(_ output: RenderOutput, options: ExportOptions) -> Data? {
-        guard let provider = CGDataProvider(data: output.pdf as CFData),
+        rasterize(pdf: output.pdf, layout: output.layout, pixelScale: options.canvas > 0 ? 1 : 3,
+                  background: options.transparentBackground ? nil : options.background)
+    }
+
+    /// PNG of `layout` (in points) at `pixelScale` pixels per point. The image
+    /// is exactly `round(width * pixelScale)` by `round(height * pixelScale)`.
+    static func rasterize(pdf: Data, layout: SVGLayout, pixelScale: CGFloat, background: RGBA?) -> Data? {
+        guard let provider = CGDataProvider(data: pdf as CFData),
               let document = CGPDFDocument(provider),
               let page = document.page(at: 1) else { return nil }
-        let pixelScale: CGFloat = options.canvas > 0 ? 1 : 3
-        let size = CGSize(width: (output.layout.width * pixelScale).rounded(.up),
-                          height: (output.layout.height * pixelScale).rounded(.up))
+        let size = CGSize(width: max((layout.width * pixelScale).rounded(), 1),
+                          height: max((layout.height * pixelScale).rounded(), 1))
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
         format.opaque = false
         let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
             let cg = context.cgContext
-            if !options.transparentBackground {
-                cg.setFillColor(options.background.cgColor)
+            if let background {
+                cg.setFillColor(background.cgColor)
                 cg.fill(CGRect(origin: .zero, size: size))
             }
             let box = page.getBoxRect(.mediaBox)
-            cg.scaleBy(x: pixelScale, y: pixelScale)
-            cg.concatenate(output.layout.transform)
+            cg.scaleBy(x: size.width / layout.width, y: size.height / layout.height)
+            cg.concatenate(layout.transform)
             cg.concatenate(CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: -box.minX, ty: box.maxY))
             cg.drawPDFPage(page)
         }

@@ -49,7 +49,7 @@ enum SelfTest {
         ]
     }
 
-    static func run() {
+    static func run() async {
         setvbuf(stdout, nil, _IONBF, 0)
         let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SelfTest", isDirectory: true)
@@ -94,9 +94,79 @@ enum SelfTest {
             try? output.pdf.write(to: directory.appendingPathComponent(label + ".pdf"))
             if let reference { try? reference.write(to: directory.appendingPathComponent(label + ".png")) }
         }
+        failures += await batchTest(directory: directory)
         print("SELFTEST-DONE failures=\(failures)")
         fflush(stdout)
         exit(0)
+    }
+
+    /// Exports the bundled sample plan, then feeds the resolver a broken plan and
+    /// checks that every problem is reported.
+    private static func batchTest(directory: URL) async -> Int {
+        var failures = 0
+        print("=== BATCH sample plan")
+        do {
+            guard let url = Bundle.main.url(forResource: "sample-plan", withExtension: "json") else {
+                print("BATCH-ERROR sample-plan.json is not in the bundle")
+                return 1
+            }
+            let plan = try IconPlan.decode(Data(contentsOf: url)).resolve()
+            print("BATCH-PLAN icons=\(plan.icons.count) errors=\(plan.errorCount) warnings=\(plan.warningCount)")
+            for issue in plan.issues { print("BATCH-ISSUE \(issue.severity) \(issue.icon ?? "-"): \(issue.message)") }
+            if plan.errorCount > 0 || plan.icons.count != 6 { failures += 1 }
+            var options = BatchOptions()
+            options.formats = .both
+            let summary = try await BatchExporter.export(plan, options: options) { _, _ in }
+            print("BATCH-RESULT files=\(summary.fileCount) icons=\(summary.iconCount) skipped=\(summary.skipped.count) expected=\(plan.fileCount(options))")
+            for item in summary.skipped { print("BATCH-SKIPPED \(item.icon): \(item.reason)") }
+            if !summary.skipped.isEmpty || summary.fileCount != plan.fileCount(options) { failures += 1 }
+            let zip = try Data(contentsOf: summary.url)
+            try zip.write(to: directory.appendingPathComponent("sample-batch.zip"))
+            print("BATCH-ZIP-BASE64 \(zip.base64EncodedString())")
+        } catch {
+            print("BATCH-ERROR \(error.localizedDescription)")
+            failures += 1
+        }
+
+        print("=== BATCH broken plan")
+        let broken = """
+        { "version": 1, "colour": 1, "defaults": { "scales": [2] },
+          "icons": [
+            { "file": "ok1", "symbol": "house.fill", "color": "blue" },
+            { "file": "OK1", "symbol": "heart.fill", "color": "red" },
+            { "file": "bad_mode", "symbol": "house.fill", "mode": "palete" },
+            { "file": "bad_color", "symbol": "house.fill", "light": ["#12345"] },
+            { "file": "bad_symbol", "symbol": "not.a.symbol" },
+            { "file": "bad_scales", "symbol": "house.fill", "scales": [2, 2] },
+            { "symbol": "heart" },
+            { "file": "x/../y", "symbol": "heart" },
+            { "file": "warn_palette", "symbol": "person.2.fill", "mode": "palette", "colors": ["red"], "colour": "typo" }
+          ] }
+        """
+        do {
+            let plan = try IconPlan.decode(Data(broken.utf8)).resolve()
+            print("BATCH-PLAN icons=\(plan.icons.count) errors=\(plan.errorCount) warnings=\(plan.warningCount)")
+            for issue in plan.issues { print("BATCH-ISSUE \(issue.severity) \(issue.icon ?? "-"): \(issue.message)") }
+            if plan.icons.map({ $0.names[0] }) != ["ok1", "warn_palette"] || plan.errorCount != 7 || plan.warningCount != 3 {
+                print("BATCH-UNEXPECTED broken plan should keep ok1 + warn_palette with 7 errors and 3 warnings")
+                failures += 1
+            }
+        } catch {
+            print("BATCH-ERROR \(error.localizedDescription)")
+            failures += 1
+        }
+
+        print("=== BATCH decode errors")
+        for text in ["{ \"icons\": [ ", "{ \"icons\": [ { \"file\": \"a\", \"symbol\": \"heart\", \"scales\": \"2\" } ] }", "{ \"name\": \"x\" }"] {
+            do {
+                _ = try IconPlan.decode(Data(text.utf8))
+                print("BATCH-UNEXPECTED decoded without error: \(text)")
+                failures += 1
+            } catch {
+                print("BATCH-DECODE-ERROR \(error.localizedDescription)")
+            }
+        }
+        return failures
     }
 
     /// The system's own bitmap rendering, for comparison with the SVG.

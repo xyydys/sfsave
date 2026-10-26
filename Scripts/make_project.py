@@ -6,6 +6,11 @@ import hashlib
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / 'SymbolStudio.xcodeproj'
 
+# JSON files copied to the app bundle root. A folder named "Resources" in the
+# bundle root would make CFBundle treat the app as an old-style bundle and
+# installation would fail with "Missing bundle ID".
+RESOURCE_FILES = ['catalog.json', 'sample-plan.json']
+
 def uid(value): return hashlib.sha1(value.encode()).hexdigest()[:24].upper()
 def quote(value): return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
@@ -20,18 +25,19 @@ def main():
     # A top-level "Resources" folder in an iOS bundle makes CFBundle treat it as an
     # old-style bundle and installation fails with "Missing bundle ID", so the
     # catalog is copied as a single file to the bundle root instead.
-    add('resources-ref', 'isa = PBXFileReference; lastKnownFileType = text.json; name = catalog.json; path = Resources/catalog.json; sourceTree = "<group>";')
+    for name in RESOURCE_FILES:
+        add('resource-ref-'+name, f'isa = PBXFileReference; lastKnownFileType = text.json; name = {quote(name)}; path = {quote("Resources/"+name)}; sourceTree = "<group>";')
+        add('resource-build-'+name, f'isa = PBXBuildFile; fileRef = {uid("resource-ref-"+name)};')
     add('assets-ref', 'isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>";')
     add('info-ref', 'isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>";')
-    for name in ['resources', 'assets']:
-        add(name+'-build', f'isa = PBXBuildFile; fileRef = {uid(name+"-ref")};')
+    add('assets-build', f'isa = PBXBuildFile; fileRef = {uid("assets-ref")};')
     add('product', 'isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SymbolStudio.app; sourceTree = BUILT_PRODUCTS_DIR;')
-    add('source-group', f'isa = PBXGroup; children = {array(["ref-"+f.name for f in sources]+["resources-ref","assets-ref","info-ref"])}; path = SymbolStudio; sourceTree = "<group>";')
+    add('source-group', f'isa = PBXGroup; children = {array(["ref-"+f.name for f in sources]+["resource-ref-"+n for n in RESOURCE_FILES]+["assets-ref","info-ref"])}; path = SymbolStudio; sourceTree = "<group>";')
     add('products-group', f'isa = PBXGroup; children = {array(["product"])}; name = Products; sourceTree = "<group>";')
     add('root-group', f'isa = PBXGroup; children = {array(["source-group", "products-group"])}; sourceTree = "<group>";')
     add('sources-phase', f'isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = {array(["build-"+f.name for f in sources])}; runOnlyForDeploymentPostprocessing = 0;')
     add('frameworks-phase', 'isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0;')
-    add('resources-phase', f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = {array(["resources-build","assets-build"])}; runOnlyForDeploymentPostprocessing = 0;')
+    add('resources-phase', f'isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = {array(["resource-build-"+n for n in RESOURCE_FILES]+["assets-build"])}; runOnlyForDeploymentPostprocessing = 0;')
     for config in ['Debug','Release']:
         debug = config == 'Debug'
         project_settings = {
@@ -43,7 +49,7 @@ def main():
         }
         target_settings = {
             'ASSETCATALOG_COMPILER_APPICON_NAME': 'AppIcon', 'CODE_SIGN_STYLE': 'Automatic',
-            'CURRENT_PROJECT_VERSION': '2', 'MARKETING_VERSION': '0.2.0', 'GENERATE_INFOPLIST_FILE': 'NO',
+            'CURRENT_PROJECT_VERSION': '3', 'MARKETING_VERSION': '0.3.0', 'GENERATE_INFOPLIST_FILE': 'NO',
             'INFOPLIST_FILE': 'SymbolStudio/Info.plist', 'PRODUCT_BUNDLE_IDENTIFIER': 'com.runyu.symbolstudio',
             'PRODUCT_NAME': '$(TARGET_NAME)', 'TARGETED_DEVICE_FAMILY': '1,2',
             'SUPPORTS_MACCATALYST': 'NO', 'SWIFT_EMIT_LOC_STRINGS': 'YES',

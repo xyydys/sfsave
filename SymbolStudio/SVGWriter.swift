@@ -29,6 +29,24 @@ enum SVGWriter {
         return SVGLayout(width: side, height: side, transform: transform)
     }
 
+    /// A rectangular canvas in points. `contain` scales the painted content to
+    /// fit inside the padding; `natural` keeps the rendered point size and
+    /// only centers the content.
+    static func layout(for drawing: VectorDrawing, frame: CGRect, width: CGFloat, height: CGFloat,
+                       padding: Double, fit: IconFit) -> SVGLayout {
+        let content = drawing.bounds.isNull ? frame : drawing.bounds
+        let w = max(width, 1), h = max(height, 1)
+        var scale: CGFloat = 1
+        if fit == .contain {
+            let inset = 1 - 2 * CGFloat(min(max(padding, 0), 0.45))
+            scale = min(w * inset / max(content.width, 0.001), h * inset / max(content.height, 0.001))
+        }
+        let transform = CGAffineTransform(translationX: -content.midX, y: -content.midY)
+            .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+            .concatenating(CGAffineTransform(translationX: w / 2, y: h / 2))
+        return SVGLayout(width: w, height: h, transform: transform)
+    }
+
     static func svg(_ drawing: VectorDrawing, layout: SVGLayout, title: String, background: RGBA?) -> String {
         let slug = title.lowercased().map { $0.isASCII && ($0.isLetter || $0.isNumber) ? String($0) : "-" }.joined()
         var writer = Writer(drawing: drawing, transform: layout.transform, prefix: slug.isEmpty ? "" : slug + "-")

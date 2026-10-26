@@ -6,6 +6,7 @@ import json
 import plistlib
 import re
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -15,11 +16,17 @@ assert names and len(names) == len(set(names))
 categories = {c['id'] for c in catalog['categories']}
 assert all(set(s['categories']) <= categories for s in catalog['symbols'])
 assert any('爱心' in s['keywords'] and s['name'] == 'heart.fill' for s in catalog['symbols'])
+sys.path.insert(0, str(ROOT/'Scripts'))
+import check_plan
+sample = json.loads((ROOT/'SymbolStudio/Resources/sample-plan.json').read_text())
+plan_errors, plan_warnings = check_plan.check(sample, set(names))
+assert not plan_errors and not plan_warnings, (plan_errors, plan_warnings)
 plistlib.loads((ROOT/'SymbolStudio/Info.plist').read_bytes())
 project = (ROOT/'SymbolStudio.xcodeproj/project.pbxproj').read_text()
 swift_files = sorted((ROOT/'SymbolStudio').glob('*.swift'))
 for f in swift_files: assert 'path = "'+f.name+'"' in project, f.name
 assert project.count('sourcecode.swift') == len(swift_files)
+for resource in ['catalog.json', 'sample-plan.json']: assert f'path = "Resources/{resource}"' in project, resource
 defined = re.findall(r'^\s*([A-F0-9]{24}) = \{', project, re.M)
 assert len(defined) == len(set(defined))
 assert set(re.findall(r'\b[A-F0-9]{24}\b', project)) == set(defined)

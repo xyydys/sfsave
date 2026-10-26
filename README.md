@@ -1,4 +1,4 @@
-# 符号工坊 SymbolStudio 0.2.0
+# 符号工坊 SymbolStudio 0.3.0
 
 iPhone / iPad 原生 SwiftUI 应用：查找 SF Symbols，按系统的渲染方式配色，导出 **SVG / PNG**，并复制 **SwiftUI / UIKit / Objective-C** 代码。
 
@@ -34,6 +34,43 @@ Image(systemName: "xmark")
     .foregroundStyle(.secondary)
 ```
 
+## 批量导出（图标方案）
+
+“批量导出”页读取一份 JSON 方案：每个图标写明输出文件名、用哪个 SF Symbol、渲染模式、浅色和深色配色、尺寸和倍率。点一下导出，得到一个 zip，里面的文件已经按方案命名：
+
+```
+tab_home@2x.png        tab_home@3x.png
+tab_home_dark@2x.png   tab_home_dark@3x.png
+svg/nav_search.svg
+manifest.json          （每个文件的路径、符号、外观、像素尺寸；被跳过的项目和原因）
+```
+
+图标会按 `canvas`（点）和 `fit` 排进固定大小的画布：`contain` 把图形放大到填满画布（减去 `padding`），`natural` 保持渲染字号只做居中。PNG 的像素尺寸是 `canvas × 倍率`，可直接给 @2x / @3x 资源用。
+
+方案示例见 `SymbolStudio/Resources/sample-plan.json`（App 里“载入示例方案”或“复制示例 JSON”即可）。字段：
+
+| 字段 | 说明 |
+| --- | --- |
+| `icons[].file` | 输出文件名，不含扩展名，可含子文件夹 `a/b`；必填 |
+| `icons[].aliases` | 其他文件名，每个名字各输出一份 |
+| `icons[].symbol` | SF Symbol 名称；必填 |
+| `mode` | `monochrome` / `hierarchical` / `palette` / `multicolor` |
+| `light` / `dark` / `colors` / `color` | 颜色列表，`#RRGGBB`、`#RRGGBBAA` 或系统色名（`blue`、`secondary`…）。`palette` 用 2–3 个，其他模式只用第一个。`colors` 浅色深色共用；只要写了 `dark` 就会同时导出深色版 |
+| `gradient` | 渐变（需要 iOS 26） |
+| `weight` / `scale` / `pointSize` / `variableValue` | 粗细、比例、字号、可变值 |
+| `canvas` / `padding` / `fit` | 画布 `[宽, 高]`（点）、四周留白（0–0.45）、`contain` 或 `natural` |
+| `scales` / `formats` / `appearances` | 倍率如 `[2, 3]`、`png` / `svg`、`light` / `dark` |
+| `background` | 背景色，默认透明 |
+| `output` | `darkSuffix`（默认 `_dark`）、`darkFolder`、`scaleSuffix`（默认 `@{n}x`）、`svgFolder`（默认 `svg`） |
+
+除了 `file` 和 `symbol`，其他字段都可以写在 `defaults` 里，再在单个图标里覆盖。以 `_`、`$` 开头的字段和 `comment` 会被忽略，可以写备注。
+
+导入时 App 会逐项检查：符号在这个系统里是否存在、颜色是否看得懂、文件名是否合法或重名、字段是否拼错。有错误的图标不会导出，其余照常导出，问题列表就显示在页面上。也可以先在电脑上检查：
+
+```bash
+python3 Scripts/check_plan.py my-plan.json
+```
+
 ## SVG 内容
 
 - `<path>` 带十六进制颜色和 `fill-opacity`；路径坐标已换算到画布，无需额外变换
@@ -58,7 +95,7 @@ Image(systemName: "xmark")
 打开 `SymbolStudio.xcodeproj`，在 Signing & Capabilities 选择自己的 Team 后运行；或者：
 
 ```bash
-./build.sh            # 未签名 IPA：build/SymbolStudio_0.2.0_unsigned.ipa
+./build.sh            # 未签名 IPA：build/SymbolStudio_0.3.0_unsigned.ipa
 ./build.sh simulator  # 模拟器版本
 Scripts/selftest.sh   # 在模拟器里跑渲染自检
 ```
@@ -72,9 +109,14 @@ Scripts/selftest.sh   # 在模拟器里跑渲染自检
 | `SVGWriter.swift` | 排版（原始尺寸 / 画布）并输出 SVG |
 | `CodeGenerator.swift` | 生成 SwiftUI、UIKit、Objective-C 代码 |
 | `EditorView.swift` | 编辑页面 |
+| `IconPlan.swift` | 图标方案 JSON 的解码、检查和命名规则 |
+| `BatchExporter.swift` / `BatchView.swift` | 批量渲染并打包 / 批量导出页面 |
+| `ZipWriter.swift` | 直接写入磁盘的 zip（不压缩，含 CRC32） |
 | `LibraryView.swift` | 图标库、我的配色、关于 |
 | `SelfTest.swift` | `-SymbolStudioSelfTest` 启动参数下的渲染自检 |
 | `Resources/catalog.json` | 名称、分类、中英文搜索关键词（不含图形） |
+| `Resources/sample-plan.json` | 示例图标方案 |
+| `Scripts/check_plan.py` | 在电脑上检查图标方案 JSON |
 | `Scripts/build_catalog.py` | 从 SF Symbols App 的 Metadata 重新生成 catalog.json |
 | `Scripts/make_project.py` | 生成 Xcode 工程（增删 Swift 文件后运行） |
 | `Scripts/verify.py` | 不依赖 Xcode 的结构检查 |

@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "name": "示例图标方案",
+  "_comment": "以下划线或 $ 开头的字段、以及 comment 会被忽略，可以用来写备注。",
+  "defaults": {
+    "weight": "regular",
+    "canvas": [60, 60],
+    "padding": 0.12,
+    "fit": "contain",
+    "scales": [2, 3],
+    "formats": ["png"]
+  },
+  "output": {
+    "darkSuffix": "_dark",
+    "darkFolder": "",
+    "scaleSuffix": "@{n}x",
+    "svgFolder": "svg"
+  },
+  "icons": [
+    {
+      "file": "tab_home",
+      "symbol": "house.fill",
+      "mode": "palette",
+      "light": ["#0A84FF", "#9CCBFF"],
+      "dark": ["#64B5FF", "#1E4F85"],
+      "note": "palette：第一个颜色画主体，第二个颜色画次要层"
+    },
+    {
+      "file": "tab_chat",
+      "aliases": ["tab_chat_selected"],
+      "symbol": "bubble.left.and.bubble.right.fill",
+      "mode": "palette",
+      "light": ["#34C759", "#A8E6B8"],
+      "dark": ["#5DDC82", "#1F6B3A"],
+      "note": "aliases：同一张图再用另一个文件名各输出一份"
+    },
+    {
+      "file": "tab_contacts",
+      "symbol": "person.2.fill",
+      "mode": "hierarchical",
+      "light": ["#FF9500"],
+      "dark": ["#FFB340"],
+      "note": "hierarchical：一个颜色，系统自动派生层级透明度"
+    },
+    {
+      "file": "tab_discover",
+      "symbol": "safari.fill",
+      "mode": "multicolor",
+      "light": ["#0A84FF"],
+      "dark": ["#64B5FF"],
+      "note": "multicolor：苹果预设的多色，颜色只作用于没有固定颜色的部分"
+    },
+    {
+      "file": "tab_me",
+      "symbol": "person.crop.circle.fill",
+      "mode": "hierarchical",
+      "colors": ["#AF52DE"],
+      "note": "colors：浅色和深色共用；系统色名（blue、secondary…）也可以写在这里"
+    },
+    {
+      "file": "nav_search",
+      "symbol": "magnifyingglass",
+      "mode": "monochrome",
+      "color": "#576B95",
+      "weight": "medium",
+      "canvas": [24, 24],
+      "padding": 0.04,
+      "scales": [1, 2, 3],
+      "formats": ["png", "svg"],
+      "note": "单个图标可以覆盖 defaults 里的任何字段"
+    }
+  ]
+}
