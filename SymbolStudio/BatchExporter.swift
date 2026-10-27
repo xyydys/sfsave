@@ -30,6 +30,8 @@ enum BatchFormats: String, CaseIterable, Identifiable {
 struct BatchOptions {
     var formats = BatchFormats.plan
     var includeDark = true
+    /// Multiplies the SVG's declared width and height; see `SVGWriter.svg`.
+    var svgScale: CGFloat = 1
 
     func formats(for icon: ResolvedIcon) -> Set<PlanFormat> { formats.override ?? Set(icon.formats) }
 }
@@ -134,11 +136,13 @@ enum BatchExporter {
                                 skipped.append(.init(icon: name, reason: "文件名重复，已跳过：\(path)"))
                                 continue
                             }
-                            let svg = SVGWriter.svg(render.drawing, layout: layout, title: name, background: icon.background)
+                            let svg = SVGWriter.svg(render.drawing, layout: layout, title: name, background: icon.background,
+                                                    displayScale: options.svgScale)
                             try zip.add(path: path, data: Data(svg.utf8))
                             files.append(ManifestFile(path: path, icon: name, symbol: icon.symbol,
                                                       appearance: appearance.rawValue, format: "svg", scale: nil,
-                                                      width: Int(layout.width.rounded()), height: Int(layout.height.rounded())))
+                                                      width: Int((layout.width * options.svgScale).rounded()),
+                                                      height: Int((layout.height * options.svgScale).rounded())))
                             wroteAny = true
                         }
                     }

@@ -295,6 +295,14 @@ enum SelfTest {
             print("CAPTURE-ZIP-BASE64 \(zip.base64EncodedString())")
             if result.fileCount != 6 || !result.skipped.isEmpty { failures += 1 }
 
+            if let render = SymbolPipeline.renderDrawing(name: "heart.fill", style: SymbolStyle()) {
+                let layout = SVGWriter.layout(for: render.drawing, frame: render.frame, width: 24, height: 24, padding: 0.1, fit: .contain)
+                let svg = SVGWriter.svg(render.drawing, layout: layout, title: "scaled", background: nil, displayScale: 10)
+                let scaled = svg.contains("width=\"240\" height=\"240\" viewBox=\"0 0 24 24\"")
+                print("CAPTURE-SVG-SCALE \(scaled ? "ok" : "FAILED")")
+                if !scaled { failures += 1 }
+            }
+
             let second = try await store.importCapture(data, merge: true)
             let reopened = CaptureStore(root: root)
             print("CAPTURE-MERGE added=\(second.added) updated=\(second.updated) choices=\(store.choices.count) reopened=\(reopened.icons.count)/\(reopened.choices.count)")

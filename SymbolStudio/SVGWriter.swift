@@ -54,12 +54,17 @@ enum SVGWriter {
         return SVGLayout(width: w, height: h, transform: transform)
     }
 
-    static func svg(_ drawing: VectorDrawing, layout: SVGLayout, title: String, background: RGBA?) -> String {
+    /// `displayScale` multiplies only the `width` and `height` attributes: the
+    /// drawing and its viewBox stay the same, but viewers that rasterize an
+    /// SVG at its declared size (such as file previews) draw it larger.
+    static func svg(_ drawing: VectorDrawing, layout: SVGLayout, title: String, background: RGBA?,
+                    displayScale: CGFloat = 1) -> String {
         let slug = title.lowercased().map { $0.isASCII && ($0.isLetter || $0.isNumber) ? String($0) : "-" }.joined()
         var writer = Writer(drawing: drawing, transform: layout.transform, prefix: slug.isEmpty ? "" : slug + "-")
         let width = svgNumber(layout.width), height = svgNumber(layout.height)
         writer.lines.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>")
-        writer.lines.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"\(width)\" height=\"\(height)\" viewBox=\"0 0 \(width) \(height)\">")
+        let shownWidth = svgNumber(layout.width * displayScale), shownHeight = svgNumber(layout.height * displayScale)
+        writer.lines.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"\(shownWidth)\" height=\"\(shownHeight)\" viewBox=\"0 0 \(width) \(height)\">")
         writer.lines.append("  <title>\(escape(title))</title>")
         writer.writeDefs(maskRegion: CGRect(x: -layout.width, y: -layout.height,
                                             width: layout.width * 3, height: layout.height * 3))

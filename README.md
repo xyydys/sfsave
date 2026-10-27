@@ -1,4 +1,4 @@
-# 符号工坊 SymbolStudio 0.4.2
+# 符号工坊 SymbolStudio 0.4.3
 
 iPhone / iPad 原生 SwiftUI 应用：查找 SF Symbols，按系统的渲染方式配色，导出 **SVG / PNG**，并复制 **SwiftUI / UIKit / Objective-C** 代码。
 

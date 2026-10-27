@@ -101,6 +101,10 @@ struct BatchView: View {
                 ForEach(BatchFormats.allCases) { Text($0.title).tag($0) }
             }
             Toggle("包含深色版本", isOn: $options.includeDark)
+            Picker("SVG 标注尺寸", selection: $options.svgScale) {
+                Text("和画布一样").tag(CGFloat(1))
+                Text("放大 10 倍").tag(CGFloat(10))
+            }
             LabeledContent("将生成", value: "\(plan.fileCount(options)) 个文件")
             Button { Task { await export(plan) } } label: {
                 Label(running ? "正在导出…" : "导出为 zip", systemImage: "square.and.arrow.down.on.square")

@@ -53,6 +53,40 @@ struct SymbolGlyph: View {
     }
 }
 
+/// An SVG that can be pinched to zoom. WebKit redraws the paths at every
+/// zoom level, so the edges stay sharp however far in you go.
+struct ZoomableSVGView: UIViewRepresentable {
+    let svg: String
+
+    final class Coordinator {
+        var loaded: String?
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let view = WKWebView(frame: .zero)
+        view.isOpaque = false
+        view.backgroundColor = .clear
+        view.scrollView.backgroundColor = .clear
+        view.scrollView.bouncesZoom = true
+        return view
+    }
+
+    func updateUIView(_ view: WKWebView, context: Context) {
+        guard context.coordinator.loaded != svg else { return }
+        context.coordinator.loaded = svg
+        let body = svg.replacingOccurrences(of: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>", with: "")
+        view.loadHTMLString("""
+        <!doctype html><html><head>\
+        <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=40,user-scalable=yes">\
+        <style>html,body{margin:0;background:transparent}\
+        body{min-height:100vh;display:flex;align-items:center;justify-content:center}\
+        svg{width:86vw;height:auto;max-height:80vh}</style></head><body>\(body)</body></html>
+        """, baseURL: nil)
+    }
+}
+
 /// Shows an SVG file with WebKit, so the preview is the exported file itself
 /// rather than another drawing of the symbol.
 struct SVGWebView: UIViewRepresentable {

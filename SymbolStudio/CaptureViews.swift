@@ -355,10 +355,24 @@ struct LookSymbol: View {
 struct CaptureDetailView: View {
     @EnvironmentObject private var capture: CaptureStore
     let names: [String]
+    @Environment(\.displayScale) private var displayScale
     @State private var name: String
-    @State private var showPicker = false
+    @State private var detailSheet: DetailSheet?
     @State private var rendered: UIImage?
+    @State private var renderedSVG: String?
     @State private var darkTiles: Bool?
+
+    private enum DetailSheet: Identifiable {
+        case picker
+        case zoom(String)
+
+        var id: String {
+            switch self {
+            case .picker: return "picker"
+            case .zoom: return "zoom"
+            }
+        }
+    }
 
     init(startName: String, names: [String]) {
         self.names = names
@@ -436,8 +450,11 @@ struct CaptureDetailView: View {
                 Text("素材信息")
             }
         }
-        .sheet(isPresented: $showPicker) {
-            SymbolPickerSheet(look: choice.look) { symbol in update(icon) { $0.symbol = symbol } }
+        .sheet(item: $detailSheet) { sheet in
+            switch sheet {
+            case .picker: SymbolPickerSheet(look: choice.look) { symbol in update(icon) { $0.symbol = symbol } }
+            case .zoom(let svg): SVGZoomSheet(svg: svg, title: icon.name, dark: darkTiles ?? icon.prefersDarkTile)
+            }
         }
         .task(id: RenderKey(name: icon.name, choice: saved)) { render(icon, choice: saved) }
     }
@@ -496,7 +513,9 @@ struct CaptureDetailView: View {
                         }
                     }
                     .frame(width: 120, height: 120)
-                    Text(choice?.replace == true ? "替换后" : "未替换").font(.caption).foregroundStyle(.secondary)
+                    .contentShape(Rectangle())
+                    .onTapGesture { if let renderedSVG, choice?.replace == true { detailSheet = .zoom(renderedSVG) } }
+                    Text(choice?.replace == true ? "替换后 · 点一下放大" : "未替换").font(.caption).foregroundStyle(.secondary)
                 }
             }
             Picker("底色", selection: Binding(get: { dark }, set: { darkTiles = $0 })) {
@@ -547,7 +566,7 @@ struct CaptureDetailView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button { showPicker = true } label: {
+                Button { detailSheet = .picker } label: {
                     OptionTile(selected: false, caption: "更多符号") {
                         Image(systemName: "square.grid.2x2").font(.title2).foregroundStyle(.tint)
                     }
@@ -668,15 +687,56 @@ struct CaptureDetailView: View {
 
     /// The replacement exactly as the export draws it.
     private func render(_ icon: CaptureIcon, choice: IconChoice?) {
-        guard let choice, choice.replace else { rendered = nil; return }
+        guard let choice, choice.replace else { rendered = nil; renderedSVG = nil; return }
         let style = choice.look.style(pointSize: 64)
-        guard let drawing = SymbolPipeline.renderDrawing(name: choice.symbol, style: style) else { rendered = nil; return }
+        guard let drawing = SymbolPipeline.renderDrawing(name: choice.symbol, style: style) else {
+            rendered = nil
+            renderedSVG = nil
+            return
+        }
         let box = capture.box(for: icon, look: choice.look, options: CaptureExportOptions())
         let layout = SVGWriter.layout(for: drawing.drawing, frame: drawing.frame, width: icon.canvas.width,
                                       height: icon.canvas.height, padding: 0.1, fit: .contain, box: box)
-        let scale = max(3, 120 / max(icon.canvas.width, icon.canvas.height))
+        // Enough pixels for the 120 pt tile on this screen.
+        let scale = max(3, displayScale * 120 / max(icon.canvas.width, icon.canvas.height, 1))
         rendered = SymbolPipeline.rasterize(pdf: drawing.pdf, layout: layout, pixelScale: scale, background: nil)
             .flatMap { UIImage(data: $0, scale: scale) }
+        renderedSVG = SVGWriter.svg(drawing.drawing, layout: layout, title: icon.name, background: nil)
+    }
+}
+
+/// The exported SVG itself, pinch to zoom.
+struct SVGZoomSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let svg: String
+    let title: String
+    @State var dark: Bool
+
+    var body: some View {
+        NavigationStack {
+            ZoomableSVGView(svg: svg)
+                .background(dark ? Color(white: 0.12) : Color(white: 0.95))
+                .safeAreaInset(edge: .bottom) {
+                    VStack(spacing: 10) {
+                        Picker("底色", selection: $dark) {
+                            Text("浅底").tag(false)
+                            Text("深底").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(maxWidth: 220)
+                        Text("这是导出的 SVG 文件本身，双指放大，边缘一直是平滑的。")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(.bar)
+                }
+                .navigationTitle(title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+        }
     }
 }
 
@@ -1095,6 +1155,7 @@ struct CaptureExportSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var scales = [3]
     @State private var formats = BatchFormats.both
+    @State private var svgScale: CGFloat = 1
     @State private var align = true
     @State private var running = false
     @State private var done = 0
@@ -1118,9 +1179,13 @@ struct CaptureExportSheet: View {
                         Text("仅 PNG").tag(BatchFormats.png)
                         Text("仅 SVG").tag(BatchFormats.svg)
                     }
+                    Picker("SVG 标注尺寸", selection: $svgScale) {
+                        Text("和原图一样").tag(CGFloat(1))
+                        Text("放大 10 倍").tag(CGFloat(10))
+                    }
                     Toggle("对齐原图位置", isOn: $align)
                 } footer: {
-                    Text("文件按微信素材名命名：name@3x.png，SVG 在 svg/ 文件夹。画布和原图一样大；对齐原图位置时，图形放在原图内容所在的矩形里。zip 里还有 plan.json，可以在“批量导出”页重新导入。")
+                    Text("文件按微信素材名命名：name@3x.png，SVG 在 svg/ 文件夹。画布和原图一样大；对齐原图位置时，图形放在原图内容所在的矩形里。zip 里还有 plan.json，可以在“批量导出”页重新导入。\nSVG 是矢量，内容不受“标注尺寸”影响；只是“文件”这类预览会按标注尺寸先画成图片，24×24 的图标放大看就糊。想在手机上预览清楚就选放大 10 倍，交给微信用建议保持和原图一样。")
                 }
                 Section {
                     Button { Task { await export() } } label: {
@@ -1176,7 +1241,9 @@ struct CaptureExportSheet: View {
             let plan = capture.resolvedPlan(options)
             total = plan.icons.count
             let json = try capture.planJSON(options)
-            var result = try await BatchExporter.export(plan, options: BatchOptions(), extras: ["plan.json": json]) { finished, count in
+            var batch = BatchOptions()
+            batch.svgScale = svgScale
+            var result = try await BatchExporter.export(plan, options: batch, extras: ["plan.json": json]) { finished, count in
                 done = finished
                 total = count
             }
