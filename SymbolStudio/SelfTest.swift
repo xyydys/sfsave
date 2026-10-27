@@ -245,7 +245,9 @@ enum SelfTest {
 
     /// Imports a small capture zip (deflated, laid out like the capture tool's),
     /// applies a preset and a badge look, exports, checks the plan JSON reads
-    /// back, merges the same capture again and reopens the saved project.
+    /// back, merges the same capture again and reopens the saved project. Then
+    /// merges a "newer version" capture and checks that no choice changes, that
+    /// bulk apply leaves the hand-made choice alone and that a backup restores.
     private static func captureTest() async -> Int {
         var failures = 0
         print("=== CAPTURE import")
@@ -256,6 +258,7 @@ enum SelfTest {
             return 1
         }
         let store = CaptureStore(root: root)
+        try? FileManager.default.removeItem(at: store.backupsFolder)
         do {
             let first = try await store.importCapture(data, merge: false)
             for icon in store.icons {
@@ -265,13 +268,14 @@ enum SelfTest {
             print("CAPTURE-IMPORT added=\(first.added) updated=\(first.updated) skipped=\(first.skipped)")
             if first.added != 3 || store.icons.count != 3 || store.icons.contains(where: { $0.inkBox == nil }) { failures += 1 }
 
-            let applied = store.apply(LookPreset.all[0], overwrite: false)
+            let applied = store.apply(LookPreset.all[0])
             print("CAPTURE-APPLY \(applied)")
             if applied != 3 { failures += 1 }
             if let icon = store.icons.first(where: { $0.name == "AS_Email" }), let preset = LookPreset.named("badgeViolet") {
                 var choice = store.choice(for: icon)
                 choice.look = preset.look(for: icon)
                 choice.presetID = preset.id
+                choice.manual = true
                 store.setChoice(choice, for: icon)
             }
 
@@ -296,12 +300,73 @@ enum SelfTest {
             print("CAPTURE-MERGE added=\(second.added) updated=\(second.updated) choices=\(store.choices.count) reopened=\(reopened.icons.count)/\(reopened.choices.count)")
             if second.added != 0 || second.updated != 3 || store.choices.count != 3
                 || reopened.icons.count != 3 || reopened.choices.count != 3 { failures += 1 }
+
+            // A newer WeChat: heart_filled is captured bigger and one icon is new.
+            let before = store.choices
+            let newer = try newerCapture(from: data)
+            let third = try await store.importCapture(newer, merge: true)
+            let heart = store.icons.first { $0.name == "heart_filled" }
+            let fresh = store.icons.filter { store.isNew($0) }.map(\.name)
+            let heartText = heart.map { "canvas=\(SVGWriter.number($0.canvas.width)) update=\($0.update.map { SVGWriter.number($0.canvas.width) } ?? "nil")" } ?? "missing"
+            print("CAPTURE-NEWER version=\(third.version ?? "-") added=\(third.added) changedKept=\(third.changedKept) new=\(fresh) heart \(heartText) choicesSame=\(store.choices == before)")
+            if third.added != 1 || third.changedKept != 1 || fresh != ["new_icon_test"] || store.choices != before
+                || heart?.canvas.width != 24 || heart?.update?.canvas.width != 48 { failures += 1 }
+            if let heart {
+                store.adoptUpdate(for: heart)
+                let adopted = store.icons.first { $0.name == "heart_filled" }
+                print("CAPTURE-ADOPT canvas=\(adopted.map { SVGWriter.number($0.canvas.width) } ?? "-") update=\(adopted?.update != nil)")
+                if adopted?.canvas.width != 48 || adopted?.update != nil { failures += 1 }
+            }
+
+            let reapplied = store.apply(LookPreset.named("sunset") ?? LookPreset.all[1], overwriteBulk: true)
+            let emailPreset = store.choices["AS_Email"]?.presetID ?? "-"
+            let heartPreset = store.choices["heart_filled"]?.presetID ?? "-"
+            print("CAPTURE-REAPPLY changed=\(reapplied) emailPreset=\(emailPreset) heartPreset=\(heartPreset)")
+            if reapplied != 2 || emailPreset != "badgeViolet" || heartPreset != "sunset" { failures += 1 }
+
+            let kept = store.choices
+            _ = try await store.importCapture(newer, merge: false)
+            let cleared = store.choices.count
+            let backups = store.backups()
+            if let latest = backups.first { try store.restore(latest) }
+            print("CAPTURE-RESTORE cleared=\(cleared) backups=\(backups.map(\.reason)) restoredSame=\(store.choices == kept)")
+            if cleared != 0 || backups.isEmpty || store.choices != kept { failures += 1 }
         } catch {
             print("CAPTURE-ERROR \(error.localizedDescription)")
             failures += 1
         }
         try? FileManager.default.removeItem(at: root)
+        try? FileManager.default.removeItem(at: store.backupsFolder)
         return failures
+    }
+
+    /// The test capture as a newer WeChat would give it: version 8.0.80,
+    /// heart_filled requested at 48×48, and an icon that was not there before.
+    private static func newerCapture(from data: Data) throws -> Data {
+        let reader = try ZipReader(data: data)
+        guard let manifestEntry = reader.entries.first(where: { $0.path.hasSuffix("manifest.json") }),
+              var manifest = try JSONSerialization.jsonObject(with: reader.read(manifestEntry)) as? [String: Any],
+              var icons = manifest["icons"] as? [[String: Any]] else {
+            throw StudioError.resource("test manifest is missing")
+        }
+        manifest["app"] = ["version": "8.0.80"]
+        for index in icons.indices where icons[index]["name"] as? String == "heart_filled" {
+            icons[index]["renderSize"] = ["w": 48, "h": 48, "unit": "pt"] as [String: Any]
+        }
+        if var extra = icons.first(where: { $0["name"] as? String == "arrow_right_regular" }) {
+            extra["name"] = "new_icon_test"
+            icons.append(extra)
+        }
+        manifest["icons"] = icons
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("newer-capture.zip")
+        try? FileManager.default.removeItem(at: url)
+        let writer = try ZipWriter(url: url)
+        for entry in reader.entries where entry.path != manifestEntry.path && !entry.isDirectory {
+            try writer.add(path: entry.path, data: reader.read(entry))
+        }
+        try writer.add(path: manifestEntry.path, data: JSONSerialization.data(withJSONObject: manifest))
+        try writer.finish()
+        return try Data(contentsOf: url)
     }
 
     /// heart_filled, arrow_right_regular and AS_Email from a real capture, zipped with deflate.

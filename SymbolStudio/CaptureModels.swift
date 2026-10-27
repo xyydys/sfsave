@@ -82,6 +82,13 @@ struct CaptureIcon: Codable, Identifiable, Equatable {
     /// Where the original's visible pixels are, in canvas points.
     var inkBox: CGRect?
     var captures: Int
+    /// The WeChat version of the capture that first had this icon.
+    var firstSeen: String? = nil
+    /// Which import added it, counting from 1.
+    var importIndex: Int? = nil
+    /// A newer capture with a different canvas or visible area, kept aside
+    /// because the icon already has a replacement tuned to the old one.
+    var update: CaptureUpdate? = nil
 
     /// The color WeChat uses most for this icon, if it tints it.
     var mainColor: String? { colors.first }
@@ -125,6 +132,13 @@ struct IconLook: Codable, Hashable {
     var layerCount: Int { mode == .palette ? min(max(fills.count, 2), 3) : 1 }
 }
 
+struct CaptureUpdate: Codable, Equatable {
+    var image: String
+    var canvas: CGSize
+    var inkBox: CGRect?
+    var version: String?
+}
+
 struct IconChoice: Codable, Hashable {
     /// `false` keeps WeChat's own icon.
     var replace: Bool
@@ -132,6 +146,11 @@ struct IconChoice: Codable, Hashable {
     var look: IconLook
     /// The preset the look came from; `nil` once it has been edited.
     var presetID: String?
+    /// Set by the per-icon screen, cleared by bulk apply. Choices saved
+    /// before this existed count as hand-made.
+    var manual: Bool? = nil
+
+    var isManual: Bool { manual ?? true }
 }
 
 private func hexColor(_ hex: String) -> RGBA { RGBA(hex: hex) ?? .black }

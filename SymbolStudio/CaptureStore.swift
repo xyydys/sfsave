@@ -8,6 +8,36 @@ struct CaptureProject: Codable {
     var device: String?
     var imported: Date
     var icons: [CaptureIcon]
+    var imports: [CaptureImportRecord]? = nil
+
+    /// Every import so far; projects saved before imports were recorded count as one.
+    var history: [CaptureImportRecord] {
+        imports ?? [CaptureImportRecord(version: appVersion, date: imported, added: icons.count, updated: 0)]
+    }
+}
+
+struct CaptureImportRecord: Codable {
+    var version: String?
+    var date: Date
+    var added: Int
+    var updated: Int
+}
+
+struct CaptureImportSummary {
+    var version: String?
+    var added: Int
+    var updated: Int
+    /// Replaced icons whose new capture differs; set aside, not applied.
+    var changedKept: Int
+    var skipped: [String]
+}
+
+struct CaptureBackup: Identifiable {
+    let url: URL
+    let date: Date
+    let reason: String
+    let count: Int
+    var id: URL { url }
 }
 
 /// Reads a WeChatIconCapture zip: `manifest.json` plus one PNG per capture.
@@ -171,19 +201,27 @@ final class CaptureStore: ObservableObject {
     // MARK: Import
 
     /// Imports a capture zip. With `merge`, new icons are added to the current
-    /// project, known ones gain the new sizes and colors, and choices stay.
+    /// project and known ones gain the new sizes and colors. Choices are never
+    /// changed by a merge; an icon that already has one also keeps its original
+    /// image and position, and a differing newer capture is set aside as
+    /// `update` for the user to accept. The choices are backed up first.
     @discardableResult
-    func importCapture(_ data: Data, merge: Bool) async throws -> (added: Int, updated: Int, skipped: [String]) {
+    func importCapture(_ data: Data, merge: Bool) async throws -> CaptureImportSummary {
         let result = try await Task.detached(priority: .userInitiated) { try CaptureImporter.read(zip: data) }.value
         let fm = FileManager.default
         pendingSave?.cancel()
-        if !merge || project == nil {
+        backupChoices(reason: merge ? "合并导入之前" : "清空后重新导入之前")
+        let previous = merge ? project : nil
+        if previous == nil {
             try? fm.removeItem(at: root)
             choices = [:]
+            images.removeAllObjects()
         }
         try fm.createDirectory(at: imagesFolder, withIntermediateDirectories: true)
-        var icons = merge ? (project?.icons ?? []) : []
-        var added = 0, updated = 0
+        var icons = previous?.icons ?? []
+        var history = previous?.history ?? []
+        let importIndex = history.count + 1
+        var added = 0, updated = 0, changedKept = 0
         for item in result.icons {
             var icon = item.icon
             if let index = icons.firstIndex(where: { $0.name == icon.name }) {
@@ -192,27 +230,141 @@ final class CaptureStore: ObservableObject {
                 for color in icon.colors where !known.colors.contains(color) { known.colors.append(color) }
                 for angle in icon.angles where !known.angles.contains(angle) { known.angles.append(angle) }
                 known.captures += icon.captures
-                if icon.canvas.width * icon.canvas.height > known.canvas.width * known.canvas.height {
-                    try item.png.write(to: imagesFolder.appendingPathComponent(known.image), options: .atomic)
-                    images.removeObject(forKey: known.image as NSString)
-                    known.canvas = icon.canvas
-                    known.inkBox = icon.inkBox
+                let larger = icon.canvas.width * icon.canvas.height > known.canvas.width * known.canvas.height
+                let moved = icon.canvas == known.canvas && !Self.sameBox(icon.inkBox, known.inkBox)
+                if larger || moved {
+                    if choices[known.name] != nil {
+                        let file = known.update?.image ?? Self.imageFileName(known.name + "_new", taken: Set(icons.map(\.image)))
+                        try item.png.write(to: imagesFolder.appendingPathComponent(file), options: .atomic)
+                        images.removeObject(forKey: file as NSString)
+                        known.update = CaptureUpdate(image: file, canvas: icon.canvas, inkBox: icon.inkBox, version: result.appVersion)
+                        changedKept += 1
+                    } else {
+                        try item.png.write(to: imagesFolder.appendingPathComponent(known.image), options: .atomic)
+                        images.removeObject(forKey: known.image as NSString)
+                        known.canvas = icon.canvas
+                        known.inkBox = icon.inkBox
+                    }
                 }
                 icons[index] = known
                 updated += 1
             } else {
                 icon.image = Self.imageFileName(icon.name, taken: Set(icons.map(\.image)))
+                icon.firstSeen = result.appVersion
+                icon.importIndex = importIndex
                 try item.png.write(to: imagesFolder.appendingPathComponent(icon.image), options: .atomic)
                 icons.append(icon)
                 added += 1
             }
         }
         icons.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-        project = CaptureProject(appVersion: result.appVersion ?? project?.appVersion,
-                                 device: result.device ?? project?.device, imported: Date(), icons: icons)
+        history.append(CaptureImportRecord(version: result.appVersion, date: Date(), added: added, updated: updated))
+        project = CaptureProject(appVersion: result.appVersion ?? previous?.appVersion,
+                                 device: result.device ?? previous?.device, imported: Date(), icons: icons, imports: history)
         try saveProject()
         try saveChoices()
-        return (added, updated, result.skipped)
+        return CaptureImportSummary(version: result.appVersion, added: added, updated: updated,
+                                    changedKept: changedKept, skipped: result.skipped)
+    }
+
+    /// Visible areas within 0.75 pt of each other count as the same.
+    private static func sameBox(_ a: CGRect?, _ b: CGRect?) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        return abs(a.minX - b.minX) < 0.75 && abs(a.minY - b.minY) < 0.75
+            && abs(a.maxX - b.maxX) < 0.75 && abs(a.maxY - b.maxY) < 0.75
+    }
+
+    /// Which import is the latest, counting from 1.
+    var latestImport: Int { project?.history.count ?? 0 }
+
+    /// Added by the latest import, when there has been more than one.
+    func isNew(_ icon: CaptureIcon) -> Bool { latestImport > 1 && (icon.importIndex ?? 1) == latestImport }
+
+    /// Uses the newer capture that was set aside: the replacement is then
+    /// exported on its canvas and at its visible area.
+    func adoptUpdate(for icon: CaptureIcon) {
+        guard var project, let index = project.icons.firstIndex(where: { $0.name == icon.name }),
+              let update = project.icons[index].update else { return }
+        var known = project.icons[index]
+        let fm = FileManager.default
+        let target = imagesFolder.appendingPathComponent(known.image)
+        try? fm.removeItem(at: target)
+        try? fm.moveItem(at: imagesFolder.appendingPathComponent(update.image), to: target)
+        images.removeObject(forKey: known.image as NSString)
+        images.removeObject(forKey: update.image as NSString)
+        known.canvas = update.canvas
+        known.inkBox = update.inkBox
+        known.update = nil
+        project.icons[index] = known
+        self.project = project
+        try? saveProject()
+    }
+
+    /// Drops the newer capture and keeps the original.
+    func dismissUpdate(for icon: CaptureIcon) {
+        guard var project, let index = project.icons.firstIndex(where: { $0.name == icon.name }),
+              let update = project.icons[index].update else { return }
+        try? FileManager.default.removeItem(at: imagesFolder.appendingPathComponent(update.image))
+        images.removeObject(forKey: update.image as NSString)
+        project.icons[index].update = nil
+        self.project = project
+        try? saveProject()
+    }
+
+    func updateImage(for icon: CaptureIcon) -> UIImage? {
+        guard let update = icon.update else { return nil }
+        return loadImage(update.image, canvasWidth: update.canvas.width)
+    }
+
+    // MARK: Backups
+
+    private struct BackupFile: Codable {
+        var reason: String
+        var date: Date
+        var choices: [String: IconChoice]
+    }
+
+    /// Next to the project folder, so clearing or deleting the project keeps them.
+    var backupsFolder: URL { root.deletingLastPathComponent().appendingPathComponent("CaptureBackups", isDirectory: true) }
+
+    /// Saves the current choices; does nothing when there are none. Keeps the newest 30.
+    @discardableResult
+    func backupChoices(reason: String) -> Bool {
+        guard !choices.isEmpty else { return false }
+        let fm = FileManager.default
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
+        let url = backupsFolder.appendingPathComponent("choices-\(formatter.string(from: Date())).json")
+        do {
+            try fm.createDirectory(at: backupsFolder, withIntermediateDirectories: true)
+            try JSONEncoder().encode(BackupFile(reason: reason, date: Date(), choices: choices)).write(to: url, options: .atomic)
+        } catch { return false }
+        for old in backups().dropFirst(30) { try? fm.removeItem(at: old.url) }
+        return true
+    }
+
+    /// Newest first.
+    func backups() -> [CaptureBackup] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: backupsFolder, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "json" }.compactMap { url -> CaptureBackup? in
+            guard let data = try? Data(contentsOf: url),
+                  let file = try? JSONDecoder().decode(BackupFile.self, from: data) else { return nil }
+            return CaptureBackup(url: url, date: file.date, reason: file.reason, count: file.choices.count)
+        }
+        .sorted { $0.date > $1.date }
+    }
+
+    /// Puts back every choice in the backup; choices for other icons stay.
+    /// The current choices are backed up first, so a restore can be undone.
+    @discardableResult
+    func restore(_ backup: CaptureBackup) throws -> Int {
+        let file = try JSONDecoder().decode(BackupFile.self, from: Data(contentsOf: backup.url))
+        backupChoices(reason: "恢复备份之前")
+        for (name, choice) in file.choices { choices[name] = choice }
+        pendingSave?.cancel()
+        try saveChoices()
+        return file.choices.count
     }
 
     private static func imageFileName(_ name: String, taken: Set<String>) -> String {
@@ -228,18 +380,21 @@ final class CaptureStore: ObservableObject {
 
     func removeProject() {
         pendingSave?.cancel()
+        backupChoices(reason: "删除项目之前")
         try? FileManager.default.removeItem(at: root)
         project = nil
         choices = [:]
         images.removeAllObjects()
     }
 
-    func image(for icon: CaptureIcon) -> UIImage? {
-        if let cached = images.object(forKey: icon.image as NSString) { return cached }
-        guard let data = try? Data(contentsOf: imagesFolder.appendingPathComponent(icon.image)),
+    func image(for icon: CaptureIcon) -> UIImage? { loadImage(icon.image, canvasWidth: icon.canvas.width) }
+
+    private func loadImage(_ file: String, canvasWidth: CGFloat) -> UIImage? {
+        if let cached = images.object(forKey: file as NSString) { return cached }
+        guard let data = try? Data(contentsOf: imagesFolder.appendingPathComponent(file)),
               let pixels = UIImage(data: data),
-              let image = UIImage(data: data, scale: max(1, pixels.size.width / max(icon.canvas.width, 1))) else { return nil }
-        images.setObject(image, forKey: icon.image as NSString)
+              let image = UIImage(data: data, scale: max(1, pixels.size.width / max(canvasWidth, 1))) else { return nil }
+        images.setObject(image, forKey: file as NSString)
         return image
     }
 
@@ -287,20 +442,63 @@ final class CaptureStore: ObservableObject {
         return isDecorative(icon) ? .decorative : .pending
     }
 
-    /// Applies `preset` to the undecided icons, or with `overwrite` also to the
-    /// ones already replaced. Icons marked "keep" and decorative ones are left
-    /// alone, and a symbol that was already picked stays.
-    func apply(_ preset: LookPreset, overwrite: Bool) -> Int {
-        var count = 0
-        for icon in icons where !isDecorative(icon) || choices[icon.name]?.replace == true {
-            let existing = choices[icon.name]
-            if existing?.replace == false || (existing != nil && !overwrite) { continue }
-            guard let symbol = existing?.symbol ?? symbols(for: icon).first else { continue }
-            choices[icon.name] = IconChoice(replace: true, symbol: symbol, look: preset.look(for: icon), presetID: preset.id)
-            count += 1
+    enum Filter: String, CaseIterable, Identifiable {
+        case all, pending, replaced, kept, decorative, new, changed
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .all: return "全部"
+            case .pending: return "待定"
+            case .replaced: return "已替换"
+            case .kept: return "不替换"
+            case .decorative: return "装饰"
+            case .new: return "最近一次导入新增"
+            case .changed: return "新版原图有变化"
+            }
         }
+    }
+
+    func matches(_ icon: CaptureIcon, _ filter: Filter) -> Bool {
+        switch filter {
+        case .all: return true
+        case .pending: return status(of: icon) == .pending
+        case .replaced: return status(of: icon) == .replaced
+        case .kept: return status(of: icon) == .kept
+        case .decorative: return status(of: icon) == .decorative
+        case .new: return isNew(icon)
+        case .changed: return icon.update != nil
+        }
+    }
+
+    /// Whether bulk apply would change this icon. Undecided icons with a
+    /// suggested symbol always; replaced ones only when their kind of choice
+    /// (bulk or hand-made) is allowed; "keep" never.
+    private func bulkTarget(_ icon: CaptureIcon, overwriteBulk: Bool, overwriteManual: Bool) -> Bool {
+        guard let existing = choices[icon.name] else {
+            return !isDecorative(icon) && !symbols(for: icon).isEmpty
+        }
+        guard existing.replace else { return false }
+        return existing.isManual ? overwriteManual : overwriteBulk
+    }
+
+    func bulkCount(overwriteBulk: Bool, overwriteManual: Bool) -> Int {
+        icons.filter { bulkTarget($0, overwriteBulk: overwriteBulk, overwriteManual: overwriteManual) }.count
+    }
+
+    /// Applies `preset` to the icons `bulkTarget` picks. A symbol that was
+    /// already chosen stays. The choices are backed up first whenever an
+    /// existing one would change.
+    func apply(_ preset: LookPreset, overwriteBulk: Bool = false, overwriteManual: Bool = false) -> Int {
+        let targets = icons.filter { bulkTarget($0, overwriteBulk: overwriteBulk, overwriteManual: overwriteManual) }
+        if targets.contains(where: { choices[$0.name] != nil }) { backupChoices(reason: "一键套用「\(preset.title)」之前") }
+        for icon in targets {
+            guard let symbol = choices[icon.name]?.symbol ?? symbols(for: icon).first else { continue }
+            choices[icon.name] = IconChoice(replace: true, symbol: symbol, look: preset.look(for: icon),
+                                            presetID: preset.id, manual: false)
+        }
+        pendingSave?.cancel()
         try? saveChoices()
-        return count
+        return targets.count
     }
 
     private func saveProject() throws {

@@ -12,7 +12,7 @@ struct CaptureView: View {
     @State private var busy = false
     @State private var pendingImport: Data?
     @State private var askMerge = false
-    @State private var filter = CaptureStore.Status.all
+    @State private var filter = CaptureStore.Filter.all
     @State private var query = ""
     @State private var sheet: CaptureSheet?
     @State private var confirmRemove = false
@@ -37,6 +37,7 @@ struct CaptureView: View {
                             Button { sheet = .export } label: { Label("导出替换图标…", systemImage: "shippingbox") }
                             Button(role: .destructive) { confirmRemove = true } label: { Label("删除项目", systemImage: "trash") }
                         }
+                        Button { sheet = .backups } label: { Label("恢复替换设置…", systemImage: "clock.arrow.circlepath") }
                     } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
@@ -48,14 +49,15 @@ struct CaptureView: View {
             switch sheet {
             case .bulk: BulkApplySheet { count in showToast("已套用到 \(count) 个图标") }
             case .export: CaptureExportSheet()
+            case .backups: BackupSheet { count in showToast("已恢复 \(count) 个图标的设置") }
             }
         }
         .confirmationDialog("已经有一个项目了", isPresented: $askMerge, titleVisibility: .visible) {
-            Button("合并到当前项目") { runImport(merge: true) }
+            Button("合并（推荐）") { runImport(merge: true) }
             Button("清空后重新导入", role: .destructive) { runImport(merge: false) }
             Button("取消", role: .cancel) { pendingImport = nil }
         } message: {
-            Text("合并时，新抓到的图标会加进来，已经设置好的替换不会丢。")
+            Text("合并：新抓到的图标补进来，已经做过替换或标了不替换的图标一个都不动，连原图和位置也不改；新版原图有变化的会单独标出来，由你决定用不用。\n清空：项目重新开始。两种都会先自动备份替换设置，可在菜单“恢复替换设置”里找回。")
         }
         .overlay(alignment: .bottom) {
             if let toast {
@@ -111,9 +113,11 @@ struct CaptureView: View {
             Section { CaptureSummary(sheet: $sheet) }
             Section {
                 Picker("筛选", selection: $filter) {
-                    ForEach(CaptureStore.Status.allCases) { Text($0.title).tag($0) }
+                    ForEach(CaptureStore.Filter.allCases) { item in
+                        Text(filterTitle(item)).tag(item)
+                    }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
             }
             ForEach(CaptureIcon.Kind.allCases, id: \.self) { kind in
                 let rows = visibleIcons.filter { $0.kind == kind }
@@ -132,14 +136,19 @@ struct CaptureView: View {
         .confirmationDialog("删除这个项目？", isPresented: $confirmRemove, titleVisibility: .visible) {
             Button("删除", role: .destructive) { capture.removeProject() }
         } message: {
-            Text("导入的原图和每个图标的替换设置都会删除。")
+            Text("导入的原图会删除。替换设置会先自动备份，重新导入后可在菜单“恢复替换设置”里找回。")
         }
+    }
+
+    private func filterTitle(_ item: CaptureStore.Filter) -> String {
+        let count = capture.icons.filter { capture.matches($0, item) }.count
+        return "\(item.title)（\(count)）"
     }
 
     private var visibleIcons: [CaptureIcon] {
         let text = query.trimmingCharacters(in: .whitespaces).lowercased()
         return capture.icons.filter { icon in
-            if filter != .all && capture.status(of: icon) != filter { return false }
+            if !capture.matches(icon, filter) { return false }
             if text.isEmpty { return true }
             return icon.name.lowercased().contains(text) || (capture.title(for: icon)?.lowercased().contains(text) ?? false)
         }
@@ -169,10 +178,12 @@ struct CaptureView: View {
             defer { busy = false }
             do {
                 let result = try await capture.importCapture(data, merge: merge)
-                var text = "导入了 \(result.added) 个新素材"
-                if result.updated > 0 { text += "，更新 \(result.updated) 个" }
+                var text = "新增 \(result.added) 个素材"
+                if result.updated > 0 { text += "，已有的 \(result.updated) 个只补了尺寸和颜色" }
+                if result.changedKept > 0 { text += "，\(result.changedKept) 个已替换的在新版里原图有变化（没改，可筛选查看）" }
                 if !result.skipped.isEmpty { text += "，\(result.skipped.count) 个没读出来" }
                 showToast(text)
+                if merge && result.added > 0 { filter = .new }
             } catch { errorMessage = error.localizedDescription }
         }
     }
@@ -180,14 +191,14 @@ struct CaptureView: View {
     private func showToast(_ text: String) {
         toast = text
         Task {
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(nanoseconds: UInt64(max(2, Double(text.count) / 12) * 1_000_000_000))
             if toast == text { toast = nil }
         }
     }
 }
 
 enum CaptureSheet: String, Identifiable {
-    case bulk, export
+    case bulk, export, backups
     var id: String { rawValue }
 }
 
@@ -203,6 +214,12 @@ private struct CaptureSummary: View {
                 Text([project.appVersion.map { "微信 " + $0 }, project.device].compactMap { $0 }.joined(separator: " · "))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if project.history.count > 1 {
+                    let steps = project.history.map { "\($0.version ?? "?")（+\($0.added)）" }.joined(separator: " → ")
+                    Text("导入 \(project.history.count) 次：\(steps)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             HStack(spacing: 14) {
                 CountLabel(title: "已替换", value: counts[.replaced] ?? 0, color: .green)
@@ -241,7 +258,11 @@ struct CaptureRow: View {
             Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.tertiary)
             ReplacementThumb(choice: capture.choices[icon.name], side: 40)
             VStack(alignment: .leading, spacing: 2) {
-                Text(icon.name).font(.subheadline.weight(.medium)).lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(icon.name).font(.subheadline.weight(.medium)).lineLimit(1)
+                    if capture.isNew(icon) { RowTag(text: "新", color: .blue) }
+                    if icon.update != nil { RowTag(text: "原图有变化", color: .orange) }
+                }
                 Text(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
         }
@@ -254,6 +275,20 @@ struct CaptureRow: View {
         parts.append(icon.sizeText)
         if let choice = capture.choices[icon.name], choice.replace { parts.append(choice.symbol) }
         return parts.joined(separator: " · ")
+    }
+}
+
+private struct RowTag: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(color)
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(color.opacity(0.14), in: Capsule())
+            .fixedSize()
     }
 }
 
@@ -361,6 +396,7 @@ struct CaptureDetailView: View {
         let choice = capture.choice(for: icon)
         let saved = capture.choices[icon.name]
         return List {
+            if let update = icon.update { updateSection(icon, update) }
             Section {
                 compare(icon, choice: saved)
                 actualSize(icon, choice: saved)
@@ -407,6 +443,38 @@ struct CaptureDetailView: View {
     }
 
     // MARK: Sections
+
+    private func updateSection(_ icon: CaptureIcon, _ update: CaptureUpdate) -> some View {
+        Section {
+            HStack(spacing: 14) {
+                VStack(spacing: 4) {
+                    OriginalThumb(icon: icon, side: 64)
+                    Text("现在用的 \(SVGWriter.number(icon.canvas.width))×\(SVGWriter.number(icon.canvas.height))")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                Image(systemName: "arrow.right").foregroundStyle(.secondary)
+                VStack(spacing: 4) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(icon.prefersDarkTile ? Color(white: 0.2) : Color(white: 0.94))
+                        if let image = capture.updateImage(for: icon) {
+                            Image(uiImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit).padding(8)
+                        }
+                    }
+                    .frame(width: 64, height: 64)
+                    Text("\(update.version.map { "微信 " + $0 } ?? "新抓的") \(SVGWriter.number(update.canvas.width))×\(SVGWriter.number(update.canvas.height))")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            Button("改用新版原图") { capture.adoptUpdate(for: icon) }
+            Button("保持现在的", role: .destructive) { capture.dismissUpdate(for: icon) }
+        } header: {
+            Text("新版原图有变化")
+        } footer: {
+            Text("新抓到的这个素材大小或位置和之前不一样。你已经给它做过替换，所以没有自动改。改用新版原图后，替换图会按新的画布和位置导出，选的符号和配色不变。")
+        }
+    }
 
     private func compare(_ icon: CaptureIcon, choice: IconChoice?) -> some View {
         let dark = darkTiles ?? icon.prefersDarkTile
@@ -552,6 +620,7 @@ struct CaptureDetailView: View {
             case .keep:
                 var choice = capture.choice(for: icon)
                 choice.replace = false
+                choice.manual = true
                 capture.setChoice(choice, for: icon)
             }
         })
@@ -563,11 +632,13 @@ struct CaptureDetailView: View {
         })
     }
 
-    /// Changes the icon's choice and marks it as replaced.
+    /// Changes the icon's choice and marks it as replaced by hand, which
+    /// keeps bulk apply away from it.
     private func update(_ icon: CaptureIcon, _ change: (inout IconChoice) -> Void) {
         var choice = capture.choice(for: icon)
         change(&choice)
         choice.replace = true
+        choice.manual = true
         capture.setChoice(choice, for: icon)
     }
 
@@ -811,7 +882,8 @@ struct BulkApplySheet: View {
     @Environment(\.dismiss) private var dismiss
     let done: (Int) -> Void
     @State private var presetID = LookPreset.all[0].id
-    @State private var overwrite = false
+    @State private var overwriteBulk = false
+    @State private var overwriteManual = false
 
     private let samples = ["heart.fill", "camera.fill", "magnifyingglass", "person.2.fill"]
 
@@ -835,9 +907,12 @@ struct BulkApplySheet: View {
                     Text("选一种风格")
                 }
                 Section {
-                    Toggle("也覆盖已经替换过的", isOn: $overwrite)
+                    Toggle("也改之前一键套用的", isOn: $overwriteBulk)
+                    Toggle("也改我逐个调过的", isOn: $overwriteManual)
+                        .tint(.red)
+                    LabeledContent("会改动", value: "\(capture.bulkCount(overwriteBulk: overwriteBulk, overwriteManual: overwriteManual)) 个图标")
                 } footer: {
-                    Text("待定的图标用推荐的第一个符号，已经选过符号的保留原来的符号。标了“不替换”的和装饰类素材（阴影、背景、加载动画等）不受影响。")
+                    Text("默认只给待定的图标套风格（用推荐的第一个符号）；你逐个调过的、标了“不替换”的和装饰类素材都不动。打开开关会改到已有的设置，改之前会自动备份，可在菜单“恢复替换设置”里找回。已选过的符号保留不变。")
                 }
             }
             .navigationTitle("一键套用")
@@ -847,11 +922,65 @@ struct BulkApplySheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("套用") {
                         guard let preset = LookPreset.named(presetID) else { return }
-                        done(capture.apply(preset, overwrite: overwrite))
+                        done(capture.apply(preset, overwriteBulk: overwriteBulk, overwriteManual: overwriteManual))
                         dismiss()
                     }
                 }
             }
+        }
+    }
+}
+
+struct BackupSheet: View {
+    @EnvironmentObject private var capture: CaptureStore
+    @Environment(\.dismiss) private var dismiss
+    let done: (Int) -> Void
+    @State private var backups: [CaptureBackup] = []
+    @State private var selected: CaptureBackup?
+    @State private var errorMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if backups.isEmpty {
+                    Text("还没有备份。导入、清空、删除项目和一键套用改动已有设置之前，都会自动备份一次。")
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    ForEach(backups) { backup in
+                        Button { selected = backup } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(backup.date.formatted(date: .abbreviated, time: .standard)).foregroundStyle(.primary)
+                                Text("\(backup.reason) · \(backup.count) 个图标").font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } footer: {
+                    if !backups.isEmpty {
+                        Text("恢复会把备份里每个图标的设置放回去，备份里没有的图标保持现在的样子。恢复前也会先备份一次，恢复错了还能再恢复回来。")
+                    }
+                }
+            }
+            .navigationTitle("恢复替换设置")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("关闭") { dismiss() } } }
+            .confirmationDialog("恢复这份备份？", isPresented: Binding(get: { selected != nil }, set: { if !$0 { selected = nil } }),
+                                titleVisibility: .visible, presenting: selected) { backup in
+                Button("恢复 \(backup.count) 个图标的设置") {
+                    do {
+                        let count = try capture.restore(backup)
+                        done(count)
+                        dismiss()
+                    } catch { errorMessage = error.localizedDescription }
+                }
+                Button("取消", role: .cancel) { selected = nil }
+            } message: { backup in
+                Text("\(backup.reason)（\(backup.date.formatted(date: .numeric, time: .shortened))）")
+            }
+            .alert("恢复失败", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+                Button("好", role: .cancel) { errorMessage = nil }
+            } message: { Text(errorMessage ?? "") }
+            .onAppear { backups = capture.backups() }
         }
     }
 }
