@@ -31,8 +31,9 @@ enum SVGWriter {
 
     /// A rectangular canvas in points. `contain` scales the painted content to
     /// fit inside the padding; `natural` keeps the rendered point size and
-    /// only centers the content. A `box` (in canvas points) replaces the
-    /// padding: the content is fitted into that rectangle and centered on it.
+    /// only centers the content, shrinking it only when it would not fit.
+    /// A `box` (in canvas points) replaces the padding: the content is
+    /// fitted into that rectangle and centered on it.
     static func layout(for drawing: VectorDrawing, frame: CGRect, width: CGFloat, height: CGFloat,
                        padding: Double, fit: IconFit, box: CGRect? = nil) -> SVGLayout {
         let content = drawing.bounds.isNull ? frame : drawing.bounds
@@ -44,10 +45,8 @@ enum SVGWriter {
             let inset = CGFloat(min(max(padding, 0), 0.45))
             target = CGRect(x: w * inset, y: h * inset, width: w * (1 - 2 * inset), height: h * (1 - 2 * inset))
         }
-        var scale: CGFloat = 1
-        if fit == .contain {
-            scale = min(target.width / max(content.width, 0.001), target.height / max(content.height, 0.001))
-        }
+        let fitting = min(target.width / max(content.width, 0.001), target.height / max(content.height, 0.001))
+        let scale = fit == .contain ? fitting : min(1, fitting)
         let transform = CGAffineTransform(translationX: -content.midX, y: -content.midY)
             .concatenating(CGAffineTransform(scaleX: scale, y: scale))
             .concatenating(CGAffineTransform(translationX: target.midX, y: target.midY))

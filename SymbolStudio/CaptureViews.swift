@@ -368,6 +368,7 @@ struct CaptureDetailView: View {
     @State private var rendered: UIImage?
     @State private var renderedSVG: String?
     @State private var darkTiles: Bool?
+    @State private var overlay = false
 
     private enum DetailSheet: Identifiable {
         case picker
@@ -425,7 +426,7 @@ struct CaptureDetailView: View {
                 compare(icon, choice: saved)
                 actualSize(icon, choice: saved)
             } footer: {
-                Text("右边是按导出设置画出来的效果：和原图同样的画布大小，放在原图内容所在的位置。")
+                Text("右边就是导出的样子：和原图一样大的画布，大小和位置按全局风格里的“尺寸统一”，再加下面的微调。打开“叠加原图”能看出差在哪，虚线是画布边界。")
             }
             Section {
                 Picker("处理方式", selection: decisionBinding(icon)) {
@@ -462,6 +463,7 @@ struct CaptureDetailView: View {
             } footer: {
                 Text("在这里改动只影响这一个图标。渐变：点“加渐变”后选结束色，角度对所有层生效。")
             }
+            if saved?.replace == true { adjustSection(icon, choice: choice, look: look) }
             Section {
                 info(icon)
             } header: {
@@ -475,7 +477,11 @@ struct CaptureDetailView: View {
             case .zoom(let svg): SVGZoomSheet(svg: svg, title: icon.name, dark: darkTiles ?? icon.prefersDarkTile)
             }
         }
-        .task(id: RenderKey(name: icon.name, choice: saved, look: saved.map { capture.effectiveLook(for: icon, choice: $0) })) {
+        .task(id: RenderKey(name: icon.name, choice: saved, look: saved.map { capture.effectiveLook(for: icon, choice: $0) },
+                            global: capture.global)) {
+            // Sliders change the choice many times a second; draw once they pause.
+            if rendered != nil { try? await Task.sleep(nanoseconds: 50_000_000) }
+            guard !Task.isCancelled else { return }
             render(icon, choice: saved)
         }
     }
@@ -526,12 +532,19 @@ struct CaptureDetailView: View {
                 VStack(spacing: 6) {
                     ZStack {
                         RoundedRectangle(cornerRadius: 26, style: .continuous).fill(dark ? Color(white: 0.2) : Color(white: 0.94))
-                        if let rendered, choice?.replace == true {
-                            Image(uiImage: rendered).resizable().interpolation(.high).aspectRatio(contentMode: .fit).padding(14)
-                        } else if let image = capture.image(for: icon) {
-                            Image(uiImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit).padding(14)
-                                .opacity(0.35)
+                        Group {
+                            if let rendered, choice?.replace == true {
+                                if overlay, let image = capture.image(for: icon) {
+                                    Image(uiImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit).opacity(0.35)
+                                }
+                                Image(uiImage: rendered).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+                                    .opacity(overlay ? 0.75 : 1)
+                            } else if let image = capture.image(for: icon) {
+                                Image(uiImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit).opacity(0.35)
+                            }
+                            if overlay { CanvasOutline(canvas: icon.canvas, dark: dark) }
                         }
+                        .padding(14)
                     }
                     .frame(width: 120, height: 120)
                     .contentShape(Rectangle())
@@ -539,15 +552,63 @@ struct CaptureDetailView: View {
                     Text(choice?.replace == true ? "替换后 · 点一下放大" : "未替换").font(.caption).foregroundStyle(.secondary)
                 }
             }
-            Picker("底色", selection: Binding(get: { dark }, set: { darkTiles = $0 })) {
-                Text("浅底").tag(false)
-                Text("深底").tag(true)
+            HStack(spacing: 12) {
+                Picker("底色", selection: Binding(get: { dark }, set: { darkTiles = $0 })) {
+                    Text("浅底").tag(false)
+                    Text("深底").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 140)
+                Toggle(isOn: $overlay) { Label("叠加原图", systemImage: "square.on.square.dashed") }
+                    .toggleStyle(.button)
+                    .controlSize(.small)
+                    .disabled(choice?.replace != true)
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 200)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
+    }
+
+    /// The icon's own nudge on top of the global sizing.
+    private func adjustSection(_ icon: CaptureIcon, choice: IconChoice, look: IconLook) -> some View {
+        let geometry = capture.geometry(for: icon, choice: choice, look: look)
+        let adjust = choice.adjust ?? IconAdjust()
+        let slim: String = geometry.sizing != capture.global.sizeMode ? "这个素材的画布是窄长的（箭头、圆点一类），所以按原图内容的位置放。" : ""
+        return Section {
+            LabeledContent("大小 \(Int((adjust.scale * 100).rounded()))%") {
+                Slider(value: adjustBinding(icon, \.scale), in: 0.5...1.5, step: 0.01).frame(maxWidth: 190)
+            }
+            LabeledContent("左右 \(Self.signed(adjust.dx))") {
+                Slider(value: adjustBinding(icon, \.dx), in: -0.25...0.25, step: 0.005).frame(maxWidth: 190)
+            }
+            LabeledContent("上下 \(Self.signed(adjust.dy))") {
+                Slider(value: adjustBinding(icon, \.dy), in: -0.25...0.25, step: 0.005).frame(maxWidth: 190)
+            }
+            Button("复位") { update(icon) { $0.adjust = nil } }
+                .disabled(adjust.isIdentity)
+            Button { detailSheet = .global } label: {
+                Label("尺寸统一：\(capture.global.sizeMode.title)…", systemImage: "square.dashed")
+            }
+        } header: {
+            Text("大小和位置（只影响这个图标）")
+        } footer: {
+            Text(slim + "在全局“尺寸统一”的基础上微调，图标仍然跟随全局风格。位置按画布宽高的百分比移动。")
+        }
+    }
+
+    private static func signed(_ value: Double) -> String {
+        let percent = Int((value * 100).rounded())
+        return percent > 0 ? "+\(percent)%" : "\(percent)%"
+    }
+
+    private func adjustBinding(_ icon: CaptureIcon, _ key: WritableKeyPath<IconAdjust, Double>) -> Binding<Double> {
+        Binding(get: { (capture.choices[icon.name]?.adjust ?? IconAdjust())[keyPath: key] }, set: { value in
+            update(icon) { choice in
+                var adjust = choice.adjust ?? IconAdjust()
+                adjust[keyPath: key] = value
+                choice.adjust = adjust.isIdentity ? nil : adjust
+            }
+        })
     }
 
     /// Original and replacement at their real size in points.
@@ -729,26 +790,21 @@ struct CaptureDetailView: View {
         let name: String
         let choice: IconChoice?
         let look: IconLook?
+        let global: GlobalStyle
     }
 
     /// The replacement exactly as the export draws it.
     private func render(_ icon: CaptureIcon, choice: IconChoice?) {
-        guard let choice, choice.replace else { rendered = nil; renderedSVG = nil; return }
-        let look = capture.effectiveLook(for: icon, choice: choice)
-        let style = look.style(pointSize: 64)
-        guard let drawing = SymbolPipeline.renderDrawing(name: choice.symbol, style: style) else {
+        guard let choice, choice.replace, let output = capture.renderReplacement(for: icon, choice: choice) else {
             rendered = nil
             renderedSVG = nil
             return
         }
-        let box = capture.box(for: icon, look: look, options: CaptureExportOptions())
-        let layout = SVGWriter.layout(for: drawing.drawing, frame: drawing.frame, width: icon.canvas.width,
-                                      height: icon.canvas.height, padding: 0.1, fit: .contain, box: box)
         // Enough pixels for the 120 pt tile on this screen.
         let scale = max(3, displayScale * 120 / max(icon.canvas.width, icon.canvas.height, 1))
-        rendered = SymbolPipeline.rasterize(pdf: drawing.pdf, layout: layout, pixelScale: scale, background: nil)
+        rendered = SymbolPipeline.rasterize(pdf: output.pdf, layout: output.layout, pixelScale: scale, background: nil)
             .flatMap { UIImage(data: $0, scale: scale) }
-        renderedSVG = SVGWriter.svg(drawing.drawing, layout: layout, title: icon.name, background: nil)
+        renderedSVG = SVGWriter.svg(output.drawing, layout: output.layout, title: icon.name, background: nil)
     }
 }
 
@@ -784,6 +840,18 @@ struct SVGZoomSheet: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }
+    }
+}
+
+/// The canvas edge, dashed, fitted into the same space as an image of the canvas.
+struct CanvasOutline: View {
+    let canvas: CGSize
+    var dark = false
+
+    var body: some View {
+        Rectangle()
+            .stroke(dark ? Color.white.opacity(0.45) : Color.black.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            .aspectRatio(canvas.width / max(canvas.height, 0.001), contentMode: .fit)
     }
 }
 
@@ -839,9 +907,6 @@ struct LookEditor: View {
             LabeledContent("符号占比") {
                 Slider(value: glyphScale, in: 0.3...0.8).frame(maxWidth: 190)
             }
-        }
-        LabeledContent("大小 \(Int((look.size * 100).rounded()))%") {
-            Slider(value: $look.size, in: 0.5...1.5, step: 0.05).frame(maxWidth: 190)
         }
     }
 
@@ -1094,8 +1159,11 @@ private struct SymbolTileGrid: View {
 struct GlobalStyleSheet: View {
     @EnvironmentObject private var capture: CaptureStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.displayScale) private var displayScale
     var done: (String) -> Void = { _ in }
     @State private var confirmReset = false
+    @State private var confirmClearAdjust = false
+    @State private var pairImages: [String: UIImage] = [:]
 
     var body: some View {
         NavigationStack {
@@ -1107,6 +1175,7 @@ struct GlobalStyleSheet: View {
                 } footer: {
                     Text("这里是跟随全局风格的图标。改下面的设置，它们会一起变；单独设置过风格的图标不受影响。")
                 }
+                sizingSection
                 Section {
                     presets
                 } header: {
@@ -1154,7 +1223,138 @@ struct GlobalStyleSheet: View {
             } message: {
                 Text("它们选的符号不变，只是风格改为全局风格。改之前会自动备份，可在“恢复替换设置”里找回。")
             }
+            .confirmationDialog("清除单独调的大小和位置？", isPresented: $confirmClearAdjust, titleVisibility: .visible) {
+                Button("全部按“尺寸统一”放", role: .destructive) {
+                    let count = capture.resetAdjustments()
+                    done("\(count) 个图标的大小和位置改回按“尺寸统一”")
+                }
+            } message: {
+                Text("改之前会自动备份，可在“恢复替换设置”里找回。")
+            }
         }
+    }
+
+    // MARK: Sizing
+
+    private var sizingSection: some View {
+        let style = capture.global
+        return Section {
+            Picker("方式", selection: sizingBinding) {
+                ForEach(IconSizing.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            if style.sizeMode != .original {
+                LabeledContent("占画布 \(Int((style.share * 100).rounded()))%") {
+                    Slider(value: shareBinding, in: 0.5...1, step: 0.01).frame(maxWidth: 190)
+                }
+                if let original = capture.originalShare {
+                    Button("按原图的平均大小（\(Int((original * 100).rounded()))%）") {
+                        var updated = capture.global
+                        updated.share = original
+                        capture.setGlobal(updated)
+                    }
+                }
+            }
+            pairs
+            if capture.adjustedCount > 0 {
+                Button(role: .destructive) { confirmClearAdjust = true } label: {
+                    Label("清除 \(capture.adjustedCount) 个图标单独调的大小和位置…", systemImage: "arrow.uturn.backward")
+                }
+            }
+        } header: {
+            Text("尺寸统一")
+        } footer: {
+            Text(style.sizeMode.detail + "\n窄长的画布（箭头、圆点、横条）总是对齐原图内容。尺寸统一对所有替换图标生效，单独设置风格的也一样；图标详情里还能再单独微调大小和位置。上面每对图左边是原图，右边是导出的替换图，虚线是画布边界。")
+        }
+    }
+
+    private struct PairKey: Hashable {
+        let style: GlobalStyle
+        let choices: [IconChoice]
+    }
+
+    private struct Pair: Identifiable {
+        let icon: CaptureIcon
+        let choice: IconChoice
+        var id: String { icon.name }
+    }
+
+    /// The first replaced icons, or undecided ones when none is replaced yet.
+    private var pairSamples: [Pair] {
+        var result: [Pair] = []
+        for icon in capture.icons where result.count < 8 {
+            guard let choice = capture.choices[icon.name], choice.replace else { continue }
+            result.append(Pair(icon: icon, choice: choice))
+        }
+        if result.isEmpty {
+            for icon in capture.fillableIcons.prefix(8) {
+                var choice = capture.choice(for: icon)
+                choice.replace = true
+                result.append(Pair(icon: icon, choice: choice))
+            }
+        }
+        return result
+    }
+
+    private var pairs: some View {
+        let samples = pairSamples
+        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 128), spacing: 10)], spacing: 10) {
+            ForEach(samples) { sample in
+                let dark = sample.icon.prefersDarkTile
+                VStack(spacing: 3) {
+                    HStack(spacing: 4) {
+                        pairTile(capture.image(for: sample.icon), canvas: sample.icon.canvas, dark: dark)
+                        pairTile(pairImages[sample.icon.name], canvas: sample.icon.canvas, dark: dark)
+                    }
+                    Text(sample.icon.name).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .task(id: PairKey(style: capture.global, choices: samples.map(\.choice))) {
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard !Task.isCancelled else { return }
+            var images: [String: UIImage] = [:]
+            for sample in samples {
+                guard let output = capture.renderReplacement(for: sample.icon, choice: sample.choice) else { continue }
+                let scale = max(2, displayScale * 52 / max(sample.icon.canvas.width, sample.icon.canvas.height, 1))
+                images[sample.icon.name] = SymbolPipeline.rasterize(pdf: output.pdf, layout: output.layout, pixelScale: scale, background: nil)
+                    .flatMap { UIImage(data: $0, scale: scale) }
+                await Task.yield()
+                if Task.isCancelled { return }
+            }
+            pairImages = images
+        }
+    }
+
+    private func pairTile(_ image: UIImage?, canvas: CGSize, dark: Bool) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous).fill(dark ? Color(white: 0.2) : Color(white: 0.94))
+            Group {
+                if let image {
+                    Image(uiImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+                }
+                CanvasOutline(canvas: canvas, dark: dark)
+            }
+            .padding(5)
+        }
+        .frame(width: 62, height: 62)
+    }
+
+    private var sizingBinding: Binding<IconSizing> {
+        Binding(get: { capture.global.sizeMode }, set: { mode in
+            var style = capture.global
+            style.sizeMode = mode
+            capture.setGlobal(style)
+        })
+    }
+
+    private var shareBinding: Binding<Double> {
+        Binding(get: { capture.global.share }, set: { value in
+            var style = capture.global
+            style.share = value
+            capture.setGlobal(style)
+        })
     }
 
     private struct Sample: Identifiable {
@@ -1297,7 +1497,6 @@ struct CaptureExportSheet: View {
     @State private var scales = [3]
     @State private var formats = BatchFormats.both
     @State private var svgScale: CGFloat = 1
-    @State private var align = true
     @State private var running = false
     @State private var done = 0
     @State private var total = 0
@@ -1329,12 +1528,11 @@ struct CaptureExportSheet: View {
                             Text("放大 10 倍").tag(CGFloat(10))
                         }
                     }
-                    Toggle("对齐原图位置", isOn: $align)
                 } footer: {
                     if target == .plugin {
-                        Text("和替换插件的模板一样：位图素材写成 png/名字@3x.png（模板里有深色版的再写一份到 png-dark/），SVG 素材写成 svg/名字.svg，manifest.json 里每个文件一条，带 inApp。只包含要替换的图标，可以直接在插件的“图标替换”里导入。画布和原图一样大；对齐原图位置时，图形放在原图内容所在的矩形里。")
+                        Text("和替换插件的模板一样：位图素材写成 png/名字@3x.png（模板里有深色版的再写一份到 png-dark/），SVG 素材写成 svg/名字.svg，manifest.json 里每个文件一条，带 inApp。只包含要替换的图标，可以直接在插件的“图标替换”里导入。画布和原图一样大，大小和位置按全局风格里的“尺寸统一”和每个图标的微调。")
                     } else {
-                        Text("文件按微信素材名命名：name@3x.png，SVG 在 svg/ 文件夹。画布和原图一样大；对齐原图位置时，图形放在原图内容所在的矩形里。zip 里还有 plan.json，可以在“批量导出”页重新导入。\nSVG 是矢量，内容不受“标注尺寸”影响；只是“文件”这类预览会按标注尺寸先画成图片，24×24 的图标放大看就糊。想在手机上预览清楚就选放大 10 倍。")
+                        Text("文件按微信素材名命名：name@3x.png，SVG 在 svg/ 文件夹。画布和原图一样大，大小和位置按全局风格里的“尺寸统一”和每个图标的微调。zip 里还有 plan.json，可以在“批量导出”页重新导入。\nSVG 是矢量，内容不受“标注尺寸”影响；只是“文件”这类预览会按标注尺寸先画成图片，24×24 的图标放大看就糊。想在手机上预览清楚就选放大 10 倍。")
                     }
                 }
                 Section {
@@ -1378,7 +1576,6 @@ struct CaptureExportSheet: View {
         var options = CaptureExportOptions()
         options.scales = scales
         options.formats = formats.override ?? [.png, .svg]
-        options.alignToOriginal = align
         return options
     }
 

@@ -115,7 +115,7 @@ struct IconLook: Codable, Hashable {
     /// SF Symbols 7 gradient rendering (iOS 26).
     var gradientRendering = false
     var badge: SymbolBadge? = nil
-    /// Size relative to the original's visible area.
+    /// Older size setting; moved into `IconChoice.adjust` when a project loads.
     var size: Double = 1
 
     func style(pointSize: Double) -> SymbolStyle {
@@ -149,10 +149,78 @@ struct PluginResource: Codable, Equatable {
 }
 
 /// The look every icon gets unless it was styled on its own.
-struct GlobalStyle: Codable, Equatable {
+struct GlobalStyle: Codable, Hashable {
     var look = IconLook(mode: .hierarchical, fills: [GradientFill(solid: RGBA(red: 0.2, green: 0.47, blue: 0.96))], weight: .medium)
     /// The first color comes from the color WeChat draws the icon in, when known.
     var useOriginalColor = false
+    /// Optional so styles saved before sizing existed still load.
+    var sizing: IconSizing? = nil
+    var coverage: Double? = nil
+
+    /// How every replacement is sized; applies to icons with their own look too.
+    var sizeMode: IconSizing {
+        get { sizing ?? .optical }
+        set { sizing = newValue }
+    }
+
+    /// For `optical` and `uniform`: share of the canvas's shorter side.
+    var share: Double {
+        get { min(max(coverage ?? 0.8, 0.4), 1) }
+        set { coverage = min(max(newValue, 0.4), 1) }
+    }
+}
+
+/// Where a replacement goes inside the original's canvas.
+enum IconSizing: String, Codable, CaseIterable, Identifiable {
+    /// Every symbol at the same point size for its canvas, like letters set
+    /// in one font size: strokes match across the whole set.
+    case optical
+    /// Every symbol scaled to fill the same square in the middle of the canvas.
+    case uniform
+    /// Each symbol scaled into the area the original's pixels cover.
+    case original
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .optical: return "统一字号"
+        case .uniform: return "统一留白"
+        case .original: return "对齐原图内容"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .optical:
+            return "同样大的画布里，所有符号用同一个字号，笔画粗细一致，圆形符号正好占画布的设定比例。宽的符号放不下时才缩小。"
+        case .uniform:
+            return "每个符号都缩放到画布中间同样大小的正方形里，四周留白一样，但笔画粗细会随符号形状变。"
+        case .original:
+            return "每个符号缩放到原图有颜色的区域里。原图留白不统一时，替换后也会大小不一。"
+        }
+    }
+}
+
+/// A per-icon nudge on top of the global sizing.
+struct IconAdjust: Codable, Hashable {
+    var scale = 1.0
+    /// Shift as a share of the canvas width and height; positive is right and down.
+    var dx = 0.0
+    var dy = 0.0
+
+    var isIdentity: Bool { abs(scale - 1) < 0.001 && abs(dx) < 0.0005 && abs(dy) < 0.0005 }
+}
+
+/// Where the replacement is drawn: the symbol's point size, and the
+/// rectangle (canvas points) it is centered in. `contain` scales it to fill
+/// the rectangle; `natural` keeps the point size unless it would not fit.
+struct IconGeometry: Equatable {
+    var pointSize: Double
+    var fit: IconFit
+    var box: CGRect
+    /// What was used: slim canvases always follow the original.
+    var sizing: IconSizing
 }
 
 struct CaptureUpdate: Codable, Equatable {
@@ -175,6 +243,8 @@ struct IconChoice: Codable, Hashable {
     /// Drawn with the global style instead of `look`. Choices saved before
     /// this existed follow it unless they were styled by hand.
     var followsGlobal: Bool? = nil
+    /// Size and position nudge; kept when the icon follows the global style.
+    var adjust: IconAdjust? = nil
 
     var isManual: Bool { manual ?? true }
     var usesGlobal: Bool { followsGlobal ?? !isManual }

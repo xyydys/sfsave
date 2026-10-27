@@ -35,14 +35,11 @@ enum PluginExporter {
                     skipped.append(.init(icon: icon.name, reason: "这个系统里没有符号 “\(choice.symbol)”。"))
                     continue
                 }
-                let look = store.effectiveLook(for: icon, choice: choice)
-                guard let render = SymbolPipeline.renderDrawing(name: choice.symbol, style: look.style(pointSize: 64)) else {
+                guard let render = store.renderReplacement(for: icon, choice: choice) else {
                     skipped.append(.init(icon: icon.name, reason: "系统没能画出符号 “\(choice.symbol)”。"))
                     continue
                 }
-                let layout = SVGWriter.layout(for: render.drawing, frame: render.frame, width: icon.canvas.width,
-                                              height: icon.canvas.height, padding: 0.1, fit: .contain,
-                                              box: store.box(for: icon, look: look, options: options))
+                let layout = render.layout
                 let formats = icon.plugin?.formats ?? [icon.kind == .bitmap ? "png" : "svg"]
                 let width = number(icon.canvas.width), height = number(icon.canvas.height)
 

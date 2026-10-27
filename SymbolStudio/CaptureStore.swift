@@ -250,8 +250,6 @@ enum CaptureImporter {
 struct CaptureExportOptions {
     var scales: [Int] = [3]
     var formats: Set<PlanFormat> = [.png, .svg]
-    /// Put each replacement where the original's visible pixels were.
-    var alignToOriginal = true
 }
 
 /// The imported capture and the replacement chosen for each icon, kept in
@@ -267,6 +265,7 @@ final class CaptureStore: ObservableObject {
     private let images = NSCache<NSString, UIImage>()
     private var pendingSave: Task<Void, Never>?
     private var pendingStyleSave: Task<Void, Never>?
+    private var opticalFactors: [WeightChoice: Double] = [:]
 
     init(root: URL? = nil) {
         self.root = root ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -283,7 +282,13 @@ final class CaptureStore: ObservableObject {
     var icons: [CaptureIcon] { project?.icons ?? [] }
 
     func load() {
-        if let data = try? Data(contentsOf: styleURL), let style = try? JSONDecoder().decode(GlobalStyle.self, from: data) {
+        if let data = try? Data(contentsOf: styleURL), var style = try? JSONDecoder().decode(GlobalStyle.self, from: data) {
+            // The old size slider becomes the share of the canvas.
+            if style.look.size != 1 {
+                if style.coverage == nil { style.share = 0.8 * style.look.size }
+                style.look.size = 1
+                try? JSONEncoder().encode(style).write(to: styleURL, options: .atomic)
+            }
             global = style
         }
         guard let data = try? Data(contentsOf: projectURL) else { return }
@@ -291,10 +296,28 @@ final class CaptureStore: ObservableObject {
             project = try JSONDecoder().decode(CaptureProject.self, from: data)
             if let saved = try? Data(contentsOf: choicesURL) {
                 choices = try JSONDecoder().decode([String: IconChoice].self, from: saved)
+                migrateSizes()
             }
         } catch {
             loadError = "读取上次的项目失败：\(error.localizedDescription)"
         }
+    }
+
+    /// Moves the size an icon's own look had into its adjustment, where the
+    /// size slider now lives.
+    private func migrateSizes() {
+        var changed = false
+        for (name, var choice) in choices where choice.look.size != 1 {
+            if !choice.usesGlobal {
+                var adjust = choice.adjust ?? IconAdjust()
+                adjust.scale *= choice.look.size
+                choice.adjust = adjust
+            }
+            choice.look.size = 1
+            choices[name] = choice
+            changed = true
+        }
+        if changed { try? saveChoices() }
     }
 
     // MARK: Import
@@ -707,16 +730,105 @@ final class CaptureStore: ObservableObject {
         try encoder.encode(choices).write(to: choicesURL, options: .atomic)
     }
 
-    // MARK: Export
+    // MARK: Size and position
 
-    /// Where the replacement goes inside the canvas, in points.
-    func box(for icon: CaptureIcon, look: IconLook, options: CaptureExportOptions) -> CGRect {
+    /// Canvases this much wider or taller than square (arrows, dots, bars)
+    /// always follow the original's visible area.
+    static let squareish: ClosedRange<CGFloat> = 0.75...1.34
+
+    /// Where the replacement goes inside the canvas: the global sizing,
+    /// then the icon's own nudge.
+    func geometry(for icon: CaptureIcon, choice: IconChoice, look: IconLook) -> IconGeometry {
         let canvas = CGRect(origin: .zero, size: icon.canvas)
-        let base = (options.alignToOriginal ? icon.inkBox : nil) ?? canvas.insetBy(dx: canvas.width * 0.1, dy: canvas.height * 0.1)
-        let scale = CGFloat(min(max(look.size, 0.3), 2))
-        let width = base.width * scale, height = base.height * scale
-        return CGRect(x: base.midX - width / 2, y: base.midY - height / 2, width: width, height: height)
+        let adjust = choice.adjust ?? IconAdjust()
+        let scale = CGFloat(min(max(look.size * adjust.scale, 0.3), 2))
+        let shift = CGPoint(x: CGFloat(adjust.dx) * canvas.width, y: CGFloat(adjust.dy) * canvas.height)
+        func centered(_ width: CGFloat, _ height: CGFloat, at center: CGPoint) -> CGRect {
+            CGRect(x: center.x + shift.x - width / 2, y: center.y + shift.y - height / 2, width: width, height: height)
+        }
+        var sizing = global.sizeMode
+        if sizing != .original, icon.inkBox != nil, !Self.squareish.contains(canvas.width / max(canvas.height, 0.001)) {
+            sizing = .original
+        }
+        let middle = CGPoint(x: canvas.midX, y: canvas.midY)
+        let side = min(canvas.width, canvas.height) * CGFloat(global.share) * scale
+        switch sizing {
+        case .original:
+            let base = icon.inkBox ?? canvas.insetBy(dx: canvas.width * 0.1, dy: canvas.height * 0.1)
+            return IconGeometry(pointSize: 64, fit: .contain,
+                                box: centered(base.width * scale, base.height * scale, at: CGPoint(x: base.midX, y: base.midY)),
+                                sizing: .original)
+        case .uniform:
+            return IconGeometry(pointSize: 64, fit: .contain, box: centered(side, side, at: middle), sizing: .uniform)
+        case .optical:
+            // A badge is a plate as wide as its point size.
+            let pointSize = look.badge == nil ? Double(side) * opticalFactor(look.weight) : Double(side)
+            // Wide symbols may use more of the canvas than a circle, up to its edges.
+            let limit = min(max(CGFloat(global.share) * scale, 0.92), 1)
+            return IconGeometry(pointSize: min(max(pointSize, 4), 512), fit: .natural,
+                                box: centered(canvas.width * limit, canvas.height * limit, at: middle), sizing: .optical)
+        }
     }
+
+    /// Point size per point of height of an SF Symbols circle at this
+    /// weight, so “80 %” means a circle symbol covers 80 % of the canvas.
+    private func opticalFactor(_ weight: WeightChoice) -> Double {
+        if let known = opticalFactors[weight] { return known }
+        var style = SymbolStyle()
+        style.weight = weight
+        style.pointSize = 64
+        var factor = 1.0
+        if let render = SymbolPipeline.renderDrawing(name: "circle.fill", style: style) {
+            let height = Double(render.drawing.bounds.height)
+            if height > 1 { factor = 64 / height }
+        }
+        opticalFactors[weight] = factor
+        return factor
+    }
+
+    /// The replacement drawn and placed the way every export does it.
+    func renderReplacement(for icon: CaptureIcon, choice: IconChoice) -> (pdf: Data, drawing: VectorDrawing, layout: SVGLayout)? {
+        let look = effectiveLook(for: icon, choice: choice)
+        let geometry = geometry(for: icon, choice: choice, look: look)
+        guard let render = SymbolPipeline.renderDrawing(name: choice.symbol, style: look.style(pointSize: geometry.pointSize)) else {
+            return nil
+        }
+        let layout = SVGWriter.layout(for: render.drawing, frame: render.frame, width: icon.canvas.width,
+                                      height: icon.canvas.height, padding: 0, fit: geometry.fit, box: geometry.box)
+        return (render.pdf, render.drawing, layout)
+    }
+
+    /// How much of the canvas the originals cover, middle value over the
+    /// non-decorative icons with a square-ish canvas.
+    var originalShare: Double? {
+        let shares = icons.compactMap { icon -> Double? in
+            guard !isDecorative(icon), let ink = icon.inkBox else { return nil }
+            let side = min(icon.canvas.width, icon.canvas.height)
+            guard side > 0, Self.squareish.contains(icon.canvas.width / max(icon.canvas.height, 0.001)) else { return nil }
+            return Double(max(ink.width, ink.height) / side)
+        }.sorted()
+        return shares.isEmpty ? nil : shares[shares.count / 2]
+    }
+
+    /// Replaced icons with a size or position nudge of their own.
+    var adjustedCount: Int { choices.values.filter { $0.replace && !($0.adjust?.isIdentity ?? true) }.count }
+
+    /// Clears every icon's nudge, after a backup.
+    @discardableResult
+    func resetAdjustments() -> Int {
+        let targets = choices.filter { !($0.value.adjust?.isIdentity ?? true) }
+        guard !targets.isEmpty else { return 0 }
+        backupChoices(reason: "清除单独的大小和位置之前")
+        for (name, var choice) in targets {
+            choice.adjust = nil
+            choices[name] = choice
+        }
+        pendingSave?.cancel()
+        try? saveChoices()
+        return targets.count
+    }
+
+    // MARK: Export
 
     func resolvedPlan(_ options: CaptureExportOptions) -> ResolvedPlan {
         var icons: [ResolvedIcon] = []
@@ -728,12 +840,13 @@ final class CaptureStore: ObservableObject {
                 continue
             }
             let look = effectiveLook(for: icon, choice: choice)
+            let geometry = geometry(for: icon, choice: choice, look: look)
             let colors = look.fills.map { ColorChoice.custom($0.start) }
             icons.append(ResolvedIcon(index: icons.count, names: [icon.name], symbol: choice.symbol, mode: look.mode,
-                                      weight: look.weight, scale: .medium, pointSize: 64, gradient: look.gradientRendering,
+                                      weight: look.weight, scale: .medium, pointSize: geometry.pointSize, gradient: look.gradientRendering,
                                       variableValue: nil, colors: [.light: colors, .dark: colors], appearances: [.light],
-                                      canvas: icon.canvas, padding: 0.1, box: box(for: icon, look: look, options: options),
-                                      fit: .contain, scales: options.scales, formats: PlanFormat.allCases.filter(options.formats.contains),
+                                      canvas: icon.canvas, padding: 0, box: geometry.box,
+                                      fit: geometry.fit, scales: options.scales, formats: PlanFormat.allCases.filter(options.formats.contains),
                                       background: nil, note: title(for: icon),
                                       fills: look.mode == .multicolor ? nil : look.fills, badge: look.badge))
         }
@@ -746,11 +859,13 @@ final class CaptureStore: ObservableObject {
         for icon in icons {
             guard let choice = choices[icon.name], choice.replace else { continue }
             let look = effectiveLook(for: icon, choice: choice)
-            let box = box(for: icon, look: look, options: options)
+            let geometry = geometry(for: icon, choice: choice, look: look)
+            let box = geometry.box
             var entry: [String: Any] = [
                 "file": icon.name, "symbol": choice.symbol, "mode": look.mode.rawValue, "weight": look.weight.rawValue,
                 "canvas": [Double(icon.canvas.width), Double(icon.canvas.height)],
                 "box": [box.minX, box.minY, box.width, box.height].map { (Double($0) * 100).rounded() / 100 },
+                "fit": geometry.fit.rawValue, "pointSize": (geometry.pointSize * 100).rounded() / 100,
                 "colors": look.fills.map(\.start.hexWithAlpha)
             ]
             if look.mode != .multicolor { entry["fills"] = look.fills.map(\.planText) }
@@ -765,7 +880,7 @@ final class CaptureStore: ObservableObject {
         }
         let plan: [String: Any] = [
             "version": 1, "name": "wechat-icons",
-            "_comment": "由“逐个替换”页导出。file 是微信的素材名，box 是原图内容所在的位置。",
+            "_comment": "由“逐个替换”页导出。file 是微信的素材名；box 是替换图在画布里的位置，fit 为 natural 时按 pointSize 画、居中放进 box。",
             "defaults": ["scales": options.scales,
                          "formats": PlanFormat.allCases.filter(options.formats.contains).map(\.rawValue)] as [String: Any],
             "icons": entries

@@ -133,6 +133,7 @@ enum SelfTest {
         failures += await fileTest(directory: directory)
         failures += await captureTest()
         failures += await templateTest()
+        failures += await sizingTest()
         failures += presetFlatTest()
         print("SELFTEST-DONE failures=\(failures)")
         fflush(stdout)
@@ -433,6 +434,141 @@ enum SelfTest {
         }
         try? FileManager.default.removeItem(at: root)
         try? FileManager.default.removeItem(at: store.backupsFolder)
+        return failures
+    }
+
+    /// Global sizing: one point size per canvas size in `optical` (a circle
+    /// covering the set share), slim canvases on the original's area, wide
+    /// symbols kept inside the canvas, per-icon nudges, and the exported plan
+    /// placing every icon where the app does.
+    private static func sizingTest() async -> Int {
+        var failures = 0
+        print("=== SIZING")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SizingSelfTest", isDirectory: true)
+        try? FileManager.default.removeItem(at: root)
+        guard let data = Data(base64Encoded: captureZip) else { return 1 }
+        let store = CaptureStore(root: root)
+        func rect(_ output: (pdf: Data, drawing: VectorDrawing, layout: SVGLayout)?) -> CGRect {
+            output.map { $0.drawing.bounds.applying($0.layout.transform) } ?? .null
+        }
+        func text(_ r: CGRect) -> String {
+            [r.minX, r.minY, r.width, r.height].map { SVGWriter.number($0) }.joined(separator: ",")
+        }
+        func check(_ label: String, _ ok: Bool, _ detail: String) {
+            print("SIZING-\(label) \(detail)\(ok ? "" : " FAILED")")
+            if !ok { failures += 1 }
+        }
+        do {
+            _ = try await store.importCapture(data, merge: false)
+            store.setGlobal(GlobalStyle())
+            store.fillPending()
+            guard let heart = store.icons.first(where: { $0.name == "heart_filled" }),
+                  let email = store.icons.first(where: { $0.name == "AS_Email" }),
+                  let arrow = store.icons.first(where: { $0.name == "arrow_right_regular" }) else {
+                print("SIZING-ERROR test icons missing")
+                return 1
+            }
+            func geometry(_ icon: CaptureIcon) -> IconGeometry {
+                let choice = store.choice(for: icon)
+                return store.geometry(for: icon, choice: choice, look: store.effectiveLook(for: icon, choice: choice))
+            }
+            let g1 = geometry(heart), g2 = geometry(email), g3 = geometry(arrow)
+            check("GEOMETRY", g1.sizing == .optical && g1.fit == .natural && abs(g2.pointSize / g1.pointSize - 32.0 / 24) < 0.01
+                    && g3.sizing == .original && g3.fit == .contain,
+                  "heart=\(g1.sizing) \(SVGWriter.number(g1.pointSize)) email=\(g2.sizing) \(SVGWriter.number(g2.pointSize)) arrow=\(g3.sizing) \(SVGWriter.number(g3.pointSize)) box=\(text(g3.box))")
+
+            var circle = store.choice(for: heart)
+            circle.symbol = "circle.fill"
+            let round = rect(store.renderReplacement(for: heart, choice: circle))
+            check("CIRCLE", abs(round.height - 19.2) < 0.4 && abs(round.midX - 12) < 0.05 && abs(round.midY - 12) < 0.05, text(round))
+
+            var wide = circle
+            wide.symbol = "person.3.sequence.fill"
+            let wideRect = rect(store.renderReplacement(for: heart, choice: wide))
+            check("WIDE", wideRect.minX >= 0.9 && wideRect.maxX <= 23.1 && wideRect.width > 20, text(wideRect))
+
+            var nudged = circle
+            nudged.adjust = IconAdjust(scale: 1.1, dx: 0.1, dy: -0.05)
+            let moved = rect(store.renderReplacement(for: heart, choice: nudged))
+            check("NUDGE", abs(moved.height - 21.12) < 0.45 && abs(moved.midX - 14.4) < 0.05 && abs(moved.midY - 10.8) < 0.05, text(moved))
+
+            // The same font size for every symbol: a plus is smaller than a circle.
+            var plus = circle
+            plus.symbol = "plus"
+            let plusRect = rect(store.renderReplacement(for: heart, choice: plus))
+            check("PLUS", plusRect.height < round.height - 1, text(plusRect))
+
+            // The exported plan puts every icon where the app does.
+            let options = CaptureExportOptions()
+            let plan = store.resolvedPlan(options)
+            let reread = try IconPlan.decode(store.planJSON(options)).resolve()
+            var planOK = reread.errorCount == 0 && reread.icons.count == plan.icons.count
+            for icon in reread.icons {
+                guard let original = store.icons.first(where: { $0.name == icon.names[0] }),
+                      let choice = store.choices[original.name],
+                      let render = SymbolPipeline.renderDrawing(name: icon.symbol, style: icon.style(for: .light)) else { planOK = false; continue }
+                let layout = SVGWriter.layout(for: render.drawing, frame: render.frame, width: icon.canvas.width,
+                                              height: icon.canvas.height, padding: icon.padding, fit: icon.fit, box: icon.box)
+                let fromPlan = render.drawing.bounds.applying(layout.transform)
+                let inApp = rect(store.renderReplacement(for: original, choice: choice))
+                let same = abs(fromPlan.minX - inApp.minX) < 0.1 && abs(fromPlan.minY - inApp.minY) < 0.1
+                    && abs(fromPlan.width - inApp.width) < 0.1 && abs(fromPlan.height - inApp.height) < 0.1
+                print("SIZING-PLAN \(original.name) fit=\(icon.fit.rawValue) pointSize=\(SVGWriter.number(icon.pointSize)) plan=\(text(fromPlan)) app=\(text(inApp))\(same ? "" : " FAILED")")
+                if !same { planOK = false }
+            }
+            for issue in reread.issues { print("SIZING-JSON-ISSUE \(issue.severity) \(issue.icon ?? "-"): \(issue.message)") }
+            if !planOK { failures += 1 }
+
+            var uniform = store.global
+            uniform.sizeMode = .uniform
+            store.setGlobal(uniform)
+            let uniformWide = rect(store.renderReplacement(for: heart, choice: wide))
+            let uniformPlus = rect(store.renderReplacement(for: heart, choice: plus))
+            check("UNIFORM", abs(max(uniformWide.width, uniformWide.height) - 19.2) < 0.05
+                    && abs(max(uniformPlus.width, uniformPlus.height) - 19.2) < 0.05,
+                  "wide=\(text(uniformWide)) plus=\(text(uniformPlus))")
+
+            var original = store.global
+            original.sizeMode = .original
+            store.setGlobal(original)
+            let ink = heart.inkBox ?? .null
+            let fitted = rect(store.renderReplacement(for: heart, choice: circle))
+            check("ORIGINAL", abs(fitted.midX - ink.midX) < 0.05 && abs(fitted.midY - ink.midY) < 0.05
+                    && abs(min(ink.width / fitted.width, ink.height / fitted.height) - 1) < 0.01,
+                  "ink=\(text(ink)) circle=\(text(fitted))")
+
+            // A sheet of symbols in each mode, for looking at.
+            for mode in IconSizing.allCases {
+                var style = store.global
+                style.sizeMode = mode
+                store.setGlobal(style)
+                for symbol in ["heart.fill", "plus", "person.3.sequence.fill", "gearshape.fill", "chevron.right", "ellipsis", "bell.fill", "camera.fill"] {
+                    var choice = circle
+                    choice.symbol = symbol
+                    guard let output = store.renderReplacement(for: heart, choice: choice) else { continue }
+                    let svg = SVGWriter.svg(output.drawing, layout: output.layout, title: symbol, background: nil)
+                    print("SIZING-SVG \(mode.rawValue) \(symbol) \(Data(svg.utf8).base64EncodedString())")
+                }
+            }
+
+            // Old saved sizes move into the per-icon nudge.
+            var legacy = store.choice(for: heart)
+            legacy.followsGlobal = false
+            legacy.look.size = 1.2
+            legacy.adjust = nil
+            store.setChoice(legacy, for: heart)
+            try await Task.sleep(nanoseconds: 600_000_000)
+            let reopened = CaptureStore(root: root)
+            let migrated = reopened.choices["heart_filled"]
+            check("MIGRATE", migrated?.look.size == 1 && abs((migrated?.adjust?.scale ?? 0) - 1.2) < 0.001,
+                  "size=\(migrated?.look.size ?? -1) scale=\(migrated?.adjust?.scale ?? -1)")
+        } catch {
+            print("SIZING-ERROR \(error.localizedDescription)")
+            failures += 1
+        }
+        try? FileManager.default.removeItem(at: root)
+        try? FileManager.default.removeItem(at: store.backupsFolder)
+        try? FileManager.default.removeItem(at: root.deletingLastPathComponent().appendingPathComponent("CaptureStyle.json"))
         return failures
     }
 

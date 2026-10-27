@@ -4,7 +4,8 @@ import UIKit
 enum IconFit: String, CaseIterable, Codable, Sendable {
     /// Scale the painted shape to fill the canvas minus padding.
     case contain
-    /// Keep the rendered point size and only center the shape.
+    /// Keep the rendered point size and only center the shape; shrink it
+    /// only when it would not fit.
     case natural
 }
 
