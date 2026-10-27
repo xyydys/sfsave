@@ -23,7 +23,8 @@ SYSTEM_COLORS = {'red', 'orange', 'yellow', 'green', 'mint', 'teal', 'cyan', 'bl
                  'pink', 'brown', 'white', 'gray', 'black', 'primary', 'secondary', 'tertiary',
                  'quaternary', 'accent'}
 STYLE_KEYS = {'mode', 'weight', 'scale', 'pointSize', 'variableValue', 'gradient', 'colors', 'color', 'light',
-              'dark', 'canvas', 'padding', 'box', 'fit', 'scales', 'formats', 'appearances', 'background'}
+              'dark', 'canvas', 'padding', 'box', 'fit', 'scales', 'formats', 'appearances', 'background',
+              'fills', 'fillAngle', 'badge'}
 ICON_KEYS = {'file', 'aliases', 'symbol', 'note'} | STYLE_KEYS
 ROOT_KEYS = {'version', 'name', 'defaults', 'output', 'icons'}
 OUTPUT_KEYS = {'darkSuffix', 'darkFolder', 'scaleSuffix', 'svgFolder'}

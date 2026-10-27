@@ -298,6 +298,48 @@ enum AppearanceChoice: String, CaseIterable, Codable, Identifiable, Sendable {
     var interfaceStyle: UIUserInterfaceStyle { self == .light ? .light : .dark }
 }
 
+/// A two-color linear gradient, used to fill a symbol layer or a badge.
+struct GradientFill: Codable, Hashable, Sendable {
+    var start: RGBA
+    var end: RGBA
+    /// Direction in degrees: 0 runs left to right, 90 top to bottom.
+    var angle: Double = 45
+
+    init(_ start: RGBA, _ end: RGBA, angle: Double = 45) {
+        self.start = start
+        self.end = end
+        self.angle = angle
+    }
+
+    init(solid color: RGBA) { self.init(color, color) }
+
+    var isSolid: Bool { start == end }
+
+    var shapeStyle: AnyShapeStyle {
+        if isSolid { return AnyShapeStyle(start.color) }
+        let radians = angle * .pi / 180
+        let dx = cos(radians) / 2, dy = sin(radians) / 2
+        return AnyShapeStyle(LinearGradient(colors: [start.color, end.color],
+                                            startPoint: UnitPoint(x: 0.5 - dx, y: 0.5 - dy),
+                                            endPoint: UnitPoint(x: 0.5 + dx, y: 0.5 + dy)))
+    }
+}
+
+enum BadgeShape: String, CaseIterable, Codable, Identifiable, Sendable {
+    case circle, squircle
+
+    var id: String { rawValue }
+    var title: String { self == .circle ? "圆形" : "圆角方形" }
+}
+
+/// Draws the symbol small on top of a filled shape, like an app icon.
+struct SymbolBadge: Codable, Hashable, Sendable {
+    var shape = BadgeShape.squircle
+    var fill: GradientFill
+    /// Glyph point size relative to the badge side.
+    var glyphScale: Double = 0.5
+}
+
 /// Everything that changes how the system draws the symbol. The same values
 /// drive the preview, the SVG export and the generated code.
 struct SymbolStyle: Codable, Hashable, Sendable {
@@ -313,6 +355,9 @@ struct SymbolStyle: Codable, Hashable, Sendable {
     var variableValue: Double = 0.5
     /// Resolves primary, secondary, accent and multicolor colors.
     var appearance = AppearanceChoice.light
+    /// Per-layer gradients that replace `colors` (not used by multicolor).
+    var fills: [GradientFill]? = nil
+    var badge: SymbolBadge? = nil
 
     func color(at index: Int) -> ColorChoice {
         index < colors.count ? colors[index] : (colors.last ?? .system(.primary))
@@ -327,6 +372,14 @@ struct SymbolStyle: Codable, Hashable, Sendable {
     var activeColors: [ColorChoice] {
         guard renderingMode == .palette else { return [color(at: 0)] }
         return (0..<min(max(paletteCount, 1), 3)).map { color(at: $0) }
+    }
+
+    /// What each layer is painted with: the gradient fills when there are
+    /// any, otherwise the active colors.
+    var layerStyles: [AnyShapeStyle] {
+        guard let fills, !fills.isEmpty, renderingMode != .multicolor else { return activeColors.map(\.shapeStyle) }
+        let count = renderingMode == .palette ? min(max(paletteCount, 1), 3) : 1
+        return (0..<count).map { fills[min($0, fills.count - 1)].shapeStyle }
     }
 }
 

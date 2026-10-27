@@ -8,12 +8,32 @@ struct StyledSymbol: View {
     var pointSize: Double? = nil
 
     var body: some View {
+        let size = pointSize ?? style.pointSize
+        if let badge = style.badge {
+            ZStack {
+                badgeShape(badge.shape, side: size).fill(badge.fill.shapeStyle)
+                glyph(size: size * badge.glyphScale)
+            }
+            .frame(width: size, height: size)
+        } else {
+            glyph(size: size)
+        }
+    }
+
+    private func glyph(size: Double) -> some View {
         image
-            .font(.system(size: pointSize ?? style.pointSize, weight: style.weight.fontWeight))
+            .font(.system(size: size, weight: style.weight.fontWeight))
             .imageScale(style.scale.imageScale)
             .symbolRenderingMode(style.renderingMode.swiftUIMode)
-            .modifier(SymbolForeground(colors: style.activeColors))
+            .modifier(SymbolForeground(styles: style.layerStyles))
             .modifier(SymbolGradient(enabled: style.gradient))
+    }
+
+    private func badgeShape(_ shape: BadgeShape, side: Double) -> AnyShape {
+        switch shape {
+        case .circle: return AnyShape(Circle())
+        case .squircle: return AnyShape(RoundedRectangle(cornerRadius: side * 0.225, style: .continuous))
+        }
     }
 
     private var image: Image {
@@ -24,10 +44,9 @@ struct StyledSymbol: View {
 }
 
 private struct SymbolForeground: ViewModifier {
-    let colors: [ColorChoice]
+    let styles: [AnyShapeStyle]
 
     func body(content: Content) -> some View {
-        let styles = colors.map(\.shapeStyle)
         switch styles.count {
         case 3: return AnyView(content.foregroundStyle(styles[0], styles[1], styles[2]))
         case 2: return AnyView(content.foregroundStyle(styles[0], styles[1]))

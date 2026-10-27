@@ -145,16 +145,28 @@ struct PlanStyle: Decodable {
     var formats: [String]?
     var appearances: [String]?
     var background: String?
+    /// Per-layer fills: `#RRGGBB`, or `#start>#end` for a gradient.
+    var fills: [String]?
+    var fillAngle: Double?
+    var badge: Badge?
     var presentKeys: [String] = []
+
+    struct Badge: Decodable {
+        var shape: String?
+        var fill: String?
+        var glyph: Double?
+    }
 
     fileprivate static let known: Set<String> = [
         "mode", "weight", "scale", "pointSize", "variableValue", "gradient", "colors", "color",
-        "light", "dark", "canvas", "padding", "box", "fit", "scales", "formats", "appearances", "background"
+        "light", "dark", "canvas", "padding", "box", "fit", "scales", "formats", "appearances", "background",
+        "fills", "fillAngle", "badge"
     ]
 
     private enum CodingKeys: String, CodingKey {
         case mode, weight, scale, pointSize, variableValue, gradient, colors, color
         case light, dark, canvas, padding, box, fit, scales, formats, appearances, background
+        case fills, fillAngle, badge
     }
 
     init(from decoder: Decoder) throws {
@@ -176,6 +188,9 @@ struct PlanStyle: Decodable {
         formats = try Self.strings(c, .formats)
         appearances = try Self.strings(c, .appearances)
         background = try c.decodeIfPresent(String.self, forKey: .background)
+        fills = try Self.strings(c, .fills)
+        fillAngle = try c.decodeIfPresent(Double.self, forKey: .fillAngle)
+        badge = try c.decodeIfPresent(Badge.self, forKey: .badge)
         presentKeys = try decoder.container(keyedBy: AnyKey.self).allKeys.map(\.stringValue)
     }
 
@@ -244,13 +259,17 @@ struct ResolvedIcon: Identifiable {
     var formats: [PlanFormat]
     var background: RGBA?
     var note: String?
+    var fills: [GradientFill]? = nil
+    var badge: SymbolBadge? = nil
 
     func style(for appearance: AppearanceChoice) -> SymbolStyle {
         var style = SymbolStyle()
         style.renderingMode = mode
         let list = colors[appearance] ?? [.system(.primary)]
         style.colors = list
-        style.paletteCount = min(max(list.count, 2), 3)
+        style.paletteCount = min(max(fills?.count ?? list.count, 2), 3)
+        style.fills = fills
+        style.badge = badge
         style.gradient = gradient
         style.weight = weight
         style.scale = scale
@@ -282,6 +301,21 @@ struct ResolvedPlan {
 
     var errorCount: Int { issues.filter { $0.severity == .error }.count }
     var warningCount: Int { issues.filter { $0.severity == .warning }.count }
+}
+
+extension GradientFill {
+    /// `#RRGGBB` for a solid fill or `#start>#end` for a gradient; system
+    /// color names are taken in their light appearance.
+    static func parse(_ text: String, angle: Double) -> GradientFill? {
+        let parts = text.split(separator: ">", omittingEmptySubsequences: false).map(String.init)
+        guard (1...2).contains(parts.count) else { return nil }
+        let colors = parts.compactMap { ColorChoice.parse($0)?.resolved(.light) }
+        guard colors.count == parts.count, let first = colors.first, let last = colors.last else { return nil }
+        return GradientFill(first, last, angle: angle)
+    }
+
+    /// The plan JSON form of this fill.
+    var planText: String { isSolid ? start.hexWithAlpha : start.hexWithAlpha + ">" + end.hexWithAlpha }
 }
 
 extension ColorChoice {
@@ -446,7 +480,34 @@ extension IconPlan {
                 if parsed.isEmpty { parsed = [.system(.primary)] }
                 colors[appearance] = parsed
             }
-            for appearance in appearances {
+            let fillAngle = pick(\.fillAngle) ?? 45
+            var fills: [GradientFill]?
+            if let texts = pick(\.fills) {
+                var parsed: [GradientFill] = []
+                for text in texts {
+                    if let fill = GradientFill.parse(text, angle: fillAngle) { parsed.append(fill) }
+                    else { fail("fills 里的 “\(text)” 看不懂。写成 #RRGGBB，或用 #起始色>#结束色 表示渐变。") }
+                }
+                if parsed.count > 3 { warn(label, "fills 最多用 3 层，多余的会被忽略。") }
+                if mode == .multicolor && !parsed.isEmpty { warn(label, "multicolor 模式不使用 fills。") }
+                fills = parsed.isEmpty ? nil : Array(parsed.prefix(3))
+            }
+            var badge: SymbolBadge?
+            if let plan = pick(\.badge) {
+                let shape = choice("badge.shape", plan.shape, BadgeShape.squircle)
+                var glyph = plan.glyph ?? 0.5
+                if !(0.2...0.9).contains(glyph) {
+                    warn(label, "badge.glyph 要在 0.2 到 0.9 之间，已调整。")
+                    glyph = min(max(glyph, 0.2), 0.9)
+                }
+                if let fill = plan.fill.flatMap({ GradientFill.parse($0, angle: fillAngle) }) {
+                    badge = SymbolBadge(shape: shape, fill: fill, glyphScale: glyph)
+                } else {
+                    fail("badge.fill 要写成 #RRGGBB，或用 #起始色>#结束色 表示渐变。")
+                }
+            }
+
+            for appearance in appearances where fills == nil || mode == .multicolor {
                 let count = colors[appearance]?.count ?? 1
                 if mode == .palette && count < 2 {
                     warn(label, "palette 模式至少要 2 个颜色（\(appearance.rawValue)），不够的会重复最后一个。")
@@ -465,7 +526,8 @@ extension IconPlan {
                                     scale: scaleChoice, pointSize: pointSize, gradient: gradient,
                                     variableValue: variable, colors: colors, appearances: appearances,
                                     canvas: canvas, padding: padding, box: box, fit: fit, scales: scales,
-                                    formats: formats, background: background, note: icon.note)
+                                    formats: formats, background: background, note: icon.note,
+                                    fills: fills, badge: badge)
 
             let paths = item.outputPaths(naming, formats: Set(formats), includeDark: true)
             if let clash = paths.first(where: { claimed[$0.lowercased()] != nil }) {

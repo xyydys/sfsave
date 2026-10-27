@@ -1,4 +1,4 @@
-# 符号工坊 SymbolStudio 0.3.0
+# 符号工坊 SymbolStudio 0.4.0
 
 iPhone / iPad 原生 SwiftUI 应用：查找 SF Symbols，按系统的渲染方式配色，导出 **SVG / PNG**，并复制 **SwiftUI / UIKit / Objective-C** 代码。
 
@@ -34,6 +34,17 @@ Image(systemName: "xmark")
     .foregroundStyle(.secondary)
 ```
 
+## 逐个替换（抓到的图标）
+
+「逐个替换」页导入抓图工具导出的 zip（`manifest.json` + `icons/`），把每个素材名列出来，同名的多次抓取合并成一项，记下微信要的尺寸、上色和旋转角度，以及原图内容所在的矩形。
+
+- 每个素材可以选“替换 / 不替换 / 待定”，挑符号（先给几个按用途挑好的候选，也能在全部符号里搜），再选一种风格：极光、日落、青柠、樱花（渐变），霓虹、撞色、糖果（分层多色），官方多色，四种带底座的“徽章”，或保留微信原色。
+- “自定义”里能改渲染模式、每一层的纯色或渐变、渐变角度、粗细、底座形状和颜色、大小。
+- “一键套用风格”把一种风格套到所有待定的图标上（装饰类素材和标了不替换的不动），然后再逐个细调。
+- 导出的 zip 按微信素材名命名（`name@3x.png`、`svg/name.svg`），画布和原图一样大，图形放在原图内容所在的位置；另附 `plan.json`，可以在「批量导出」页重新导入。
+
+候选符号和“装饰类”标记来自 `SymbolStudio/Resources/wechat-suggestions.json`（由 `Scripts/wechat_suggestions.py` 生成，覆盖微信 8.0.73 抓到的 336 个素材）；不在表里的素材按名字里的英文单词猜。
+
 ## 批量导出（图标方案）
 
 “批量导出”页读取一份 JSON 方案：每个图标写明输出文件名、用哪个 SF Symbol、渲染模式、浅色和深色配色、尺寸和倍率。点一下导出，得到一个 zip，里面的文件已经按方案命名：
@@ -62,6 +73,8 @@ manifest.json          （每个文件的路径、符号、外观、像素尺寸
 | `box` | `[x, y, 宽, 高]`（点）：把图形放进画布里的这个矩形并居中，代替 `padding`。替换现有图标时，填原图内容所在的矩形，新图标就和原图对齐 |
 | `scales` / `formats` / `appearances` | 倍率如 `[2, 3]`、`png` / `svg`、`light` / `dark` |
 | `background` | 背景色，默认透明 |
+| `fills` / `fillAngle` | 每层的填充，替代颜色：`#RRGGBB` 是纯色，`#起始色>#结束色` 是线性渐变；`fillAngle` 是渐变方向（度，默认 45，从左上到右下） |
+| `badge` | 底座：`{"shape": "circle" 或 "squircle", "fill": "#6A5CFF>#C04CFD", "glyph": 0.5}`，符号画在填色的圆形或圆角方形上，`glyph` 是符号相对底座的大小 |
 | `output` | `darkSuffix`（默认 `_dark`）、`darkFolder`、`scaleSuffix`（默认 `@{n}x`）、`svgFolder`（默认 `svg`） |
 
 除了 `file` 和 `symbol`，其他字段都可以写在 `defaults` 里，再在单个图标里覆盖。以 `_`、`$` 开头的字段和 `comment` 会被忽略，可以写备注。

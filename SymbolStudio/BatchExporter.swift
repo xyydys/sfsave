@@ -49,7 +49,7 @@ struct BatchSummary {
     let url: URL
     let fileCount: Int
     let iconCount: Int
-    let skipped: [Skipped]
+    var skipped: [Skipped]
 }
 
 private struct ManifestFile: Codable {
@@ -75,7 +75,8 @@ private struct Manifest: Codable {
 /// a `manifest.json` that lists each file and anything that was skipped.
 @MainActor
 enum BatchExporter {
-    static func export(_ plan: ResolvedPlan, options: BatchOptions,
+    /// `extras` are added to the zip as they are, e.g. `["plan.json": data]`.
+    static func export(_ plan: ResolvedPlan, options: BatchOptions, extras: [String: Data] = [:],
                        progress: (Int, Int) -> Void) async throws -> BatchSummary {
         let folder = FileManager.default.temporaryDirectory
             .appendingPathComponent("SymbolStudio-exports", isDirectory: true)
@@ -151,6 +152,9 @@ enum BatchExporter {
             let manifest = Manifest(plan: plan.name, generated: ISO8601DateFormatter().string(from: Date()),
                                     files: files, skipped: skipped)
             try zip.add(path: "manifest.json", data: try encoder.encode(manifest))
+            for (path, data) in extras.sorted(by: { $0.key < $1.key }) where !zip.contains(path) {
+                try zip.add(path: path, data: data)
+            }
             try zip.finish()
         } catch {
             zip.cancel()

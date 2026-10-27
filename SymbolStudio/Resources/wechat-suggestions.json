@@ -1,0 +1,2523 @@
+{
+ "version": 1,
+ "source": "WeChat 8.0.73",
+ "icons": {
+  "Action_JD_cart": {
+   "title": "购物车",
+   "symbols": [
+    "cart.fill",
+    "cart",
+    "bag.fill"
+   ]
+  },
+  "Action_JD_categories": {
+   "title": "分类",
+   "symbols": [
+    "list.bullet",
+    "square.grid.2x2.fill",
+    "list.bullet.rectangle.fill"
+   ]
+  },
+  "Action_JD_index": {
+   "title": "首页",
+   "symbols": [
+    "house.fill",
+    "house",
+    "house.circle.fill"
+   ]
+  },
+  "Action_JD_member": {
+   "title": "会员",
+   "symbols": [
+    "crown.fill",
+    "star.circle.fill",
+    "person.crop.circle.badge.checkmark"
+   ]
+  },
+  "Action_JD_profile": {
+   "title": "我的",
+   "symbols": [
+    "person.fill",
+    "person.crop.circle.fill",
+    "person"
+   ]
+  },
+  "Action_Moments": {
+   "title": "分享到朋友圈",
+   "symbols": [
+    "camera.aperture",
+    "circle.hexagongrid.fill",
+    "sparkles"
+   ]
+  },
+  "AdCommentAt": {
+   "title": "@ 提到",
+   "symbols": [
+    "at",
+    "at.circle.fill",
+    "at.badge.plus"
+   ]
+  },
+  "AdCommentAtHl": {
+   "title": "@ 提到（按下）",
+   "symbols": [
+    "at",
+    "at.circle.fill",
+    "at.badge.plus"
+   ]
+  },
+  "add_friend_icon_addgroup": {
+   "title": "发起群聊",
+   "symbols": [
+    "person.2.fill",
+    "person.3.fill",
+    "person.2.circle.fill"
+   ]
+  },
+  "album_operate_more_2_dots": {
+   "title": "朋友圈 ·· 按钮",
+   "symbols": [
+    "ellipsis",
+    "ellipsis.circle.fill",
+    "ellipsis.rectangle.fill"
+   ]
+  },
+  "AlbumCommentBackgroundHL": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "AlbumCommentLine": {
+   "title": "分隔线",
+   "symbols": [],
+   "decorative": true
+  },
+  "AlbumLikeBackgroundHL": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "AlbumListViewBkg": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "AlbumOperateMore": {
+   "title": "朋友圈评论按钮",
+   "symbols": [
+    "ellipsis.rectangle.fill",
+    "ellipsis.bubble.fill",
+    "ellipsis"
+   ]
+  },
+  "AlbumOperateMoreViewBkg": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "AlbumRedDelete": {
+   "title": "删除",
+   "symbols": [
+    "minus.circle.fill",
+    "trash.circle.fill",
+    "xmark.circle.fill"
+   ]
+  },
+  "AlbumReflashIcon": {
+   "title": "朋友圈刷新",
+   "symbols": [
+    "camera.aperture",
+    "arrow.clockwise.circle.fill",
+    "circle.hexagongrid.fill"
+   ]
+  },
+  "Albumtimeline_video_shadow": {
+   "title": "阴影",
+   "symbols": [],
+   "decorative": true
+  },
+  "AlbumTimeLineTipBkg": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "AlbumTimeLineTipBkgHL": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "AlbumTitleBkgMask": {
+   "title": "遮罩",
+   "symbols": [],
+   "decorative": true
+  },
+  "arrow_double_regular": {
+   "title": "双箭头向下",
+   "symbols": [
+    "chevron.down.2",
+    "chevron.compact.down",
+    "arrow.down.circle.fill"
+   ]
+  },
+  "arrow_down_regular": {
+   "title": "向下箭头",
+   "symbols": [
+    "chevron.down",
+    "chevron.compact.down",
+    "arrowtriangle.down.fill"
+   ]
+  },
+  "arrow_left_filled": {
+   "title": "返回",
+   "symbols": [
+    "chevron.left",
+    "arrow.left",
+    "chevron.backward.circle.fill"
+   ]
+  },
+  "arrow_left_regular": {
+   "title": "返回",
+   "symbols": [
+    "chevron.left",
+    "chevron.backward",
+    "arrow.left"
+   ]
+  },
+  "arrow_right_filled": {
+   "title": "右箭头",
+   "symbols": [
+    "chevron.right",
+    "chevron.forward.circle.fill",
+    "arrow.right"
+   ]
+  },
+  "arrow_right_regular": {
+   "title": "列表右箭头",
+   "symbols": [
+    "chevron.right",
+    "chevron.forward",
+    "arrow.right"
+   ]
+  },
+  "arrow_to_vertical": {
+   "title": "横竖屏切换",
+   "symbols": [
+    "rectangle.landscape.rotate",
+    "rotate.right",
+    "arrow.clockwise"
+   ]
+  },
+  "AS_Email": {
+   "title": "邮件",
+   "symbols": [
+    "envelope.fill",
+    "envelope.circle.fill",
+    "paperplane.fill"
+   ]
+  },
+  "avatar_dotline_add_bg": {
+   "title": "添加成员",
+   "symbols": [
+    "plus.square.dashed",
+    "person.badge.plus",
+    "plus.circle"
+   ]
+  },
+  "avatar_dotline_minus_bg": {
+   "title": "移除成员",
+   "symbols": [
+    "minus.square",
+    "person.badge.minus",
+    "minus.circle"
+   ]
+  },
+  "bell_off_regular": {
+   "title": "消息免打扰",
+   "symbols": [
+    "bell.slash",
+    "bell.slash.fill",
+    "moon.zzz"
+   ]
+  },
+  "bell_on_filled": {
+   "title": "提醒",
+   "symbols": [
+    "bell.fill",
+    "bell.badge.fill",
+    "bell.circle.fill"
+   ]
+  },
+  "bottom_right_shadow": {
+   "title": "阴影",
+   "symbols": [],
+   "decorative": true
+  },
+  "bubble_circle_regular": {
+   "title": "聊天",
+   "symbols": [
+    "bubble.left",
+    "message",
+    "bubble.left.fill"
+   ]
+  },
+  "bubble_filled": {
+   "title": "评论",
+   "symbols": [
+    "bubble.left.fill",
+    "message.fill",
+    "ellipsis.bubble.fill"
+   ]
+  },
+  "bubble_regular": {
+   "title": "评论",
+   "symbols": [
+    "bubble.left",
+    "text.bubble",
+    "message"
+   ]
+  },
+  "bullet_screen_off_regular": {
+   "title": "弹幕关",
+   "symbols": [
+    "text.bubble",
+    "captions.bubble",
+    "bubble.middle.bottom"
+   ]
+  },
+  "bullet_screen_regular": {
+   "title": "弹幕",
+   "symbols": [
+    "captions.bubble.fill",
+    "text.bubble.fill",
+    "bubble.left.and.text.bubble.right.fill"
+   ]
+  },
+  "C2C_Image_Download_Cancel": {
+   "title": "取消下载",
+   "symbols": [
+    "xmark",
+    "xmark.circle.fill",
+    "stop.circle.fill"
+   ]
+  },
+  "camera_filled": {
+   "title": "相机",
+   "symbols": [
+    "camera.fill",
+    "camera.circle.fill",
+    "camera"
+   ]
+  },
+  "camera_regular": {
+   "title": "相机",
+   "symbols": [
+    "camera",
+    "camera.fill",
+    "camera.circle"
+   ]
+  },
+  "cardholder_filled": {
+   "title": "卡包",
+   "symbols": [
+    "wallet.pass.fill",
+    "creditcard.fill",
+    "menucard.fill"
+   ]
+  },
+  "ChatRoom_Bubble_Text_Receiver_White": {
+   "title": "聊天气泡背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "ChatRoom_Bubble_Text_Sender_Green": {
+   "title": "聊天气泡背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "ChatRoom_Bubble_Voice_Receiver": {
+   "title": "语音消息",
+   "symbols": [
+    "speaker.wave.3.fill",
+    "wave.3.right",
+    "waveform"
+   ]
+  },
+  "ChatRoom_Bubble_Voice_Receiver_Playing1": {
+   "title": "语音播放动画 1",
+   "symbols": [
+    "speaker.wave.1.fill",
+    "wave.3.right",
+    "speaker.fill"
+   ]
+  },
+  "ChatRoom_Bubble_Voice_Receiver_Playing2": {
+   "title": "语音播放动画 2",
+   "symbols": [
+    "speaker.wave.2.fill",
+    "wave.3.right",
+    "speaker.wave.1.fill"
+   ]
+  },
+  "ChatRoom_Bubble_Voice_Receiver_Playing3": {
+   "title": "语音播放动画 3",
+   "symbols": [
+    "speaker.wave.3.fill",
+    "wave.3.right",
+    "speaker.wave.2.fill"
+   ]
+  },
+  "check_mark_filled": {
+   "title": "对勾",
+   "symbols": [
+    "checkmark",
+    "checkmark.circle.fill",
+    "checkmark.seal.fill"
+   ]
+  },
+  "clock_regular": {
+   "title": "时间",
+   "symbols": [
+    "clock",
+    "clock.fill",
+    "alarm"
+   ]
+  },
+  "Contact_Chatonlyfriends": {
+   "title": "仅聊天的朋友",
+   "symbols": [
+    "person.bubble.fill",
+    "bubble.left.and.bubble.right.fill",
+    "person.crop.circle.fill"
+   ]
+  },
+  "Contact_icon_ContactTag": {
+   "title": "标签",
+   "symbols": [
+    "tag.fill",
+    "tag.circle.fill",
+    "tag"
+   ]
+  },
+  "ContactIndexShape": {
+   "title": "索引气泡背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "copy_filled": {
+   "title": "复制",
+   "symbols": [
+    "document.on.document.fill",
+    "square.fill.on.square.fill",
+    "document.on.clipboard.fill"
+   ]
+  },
+  "copy_regular": {
+   "title": "复制",
+   "symbols": [
+    "document.on.document",
+    "square.on.square",
+    "document.on.clipboard"
+   ]
+  },
+  "DefaultHead": {
+   "title": "默认头像",
+   "symbols": [
+    "person.crop.square.fill",
+    "person.crop.circle.fill",
+    "person.fill"
+   ]
+  },
+  "DefaultProfileHead": {
+   "title": "默认头像",
+   "symbols": [
+    "person.crop.square.fill",
+    "person.crop.circle.fill",
+    "person.fill"
+   ]
+  },
+  "DefaultProfileHead_phone": {
+   "title": "默认头像",
+   "symbols": [
+    "person.crop.square.fill",
+    "person.crop.circle.fill",
+    "person.fill"
+   ]
+  },
+  "discover_filled_colorful": {
+   "title": "在浏览器打开",
+   "symbols": [
+    "safari.fill",
+    "safari",
+    "location.north.circle.fill"
+   ]
+  },
+  "doc_regular": {
+   "title": "文件",
+   "symbols": [
+    "document",
+    "document.fill",
+    "text.document"
+   ]
+  },
+  "dot_3_filled": {
+   "title": "更多",
+   "symbols": [
+    "ellipsis",
+    "ellipsis.circle.fill",
+    "ellipsis.rectangle.fill"
+   ]
+  },
+  "dot_3_regular": {
+   "title": "更多",
+   "symbols": [
+    "ellipsis",
+    "ellipsis.circle",
+    "ellipsis.circle.fill"
+   ]
+  },
+  "down_float_shadow": {
+   "title": "阴影",
+   "symbols": [],
+   "decorative": true
+  },
+  "download_filled": {
+   "title": "下载",
+   "symbols": [
+    "arrow.down.square.fill",
+    "square.and.arrow.down.fill",
+    "arrow.down.circle.fill"
+   ]
+  },
+  "download_from_cloud_roam": {
+   "title": "云端下载",
+   "symbols": [
+    "icloud.and.arrow.down",
+    "icloud.and.arrow.down.fill",
+    "arrow.down.circle"
+   ]
+  },
+  "download_regular": {
+   "title": "下载",
+   "symbols": [
+    "square.and.arrow.down",
+    "arrow.down.to.line",
+    "arrow.down.square"
+   ]
+  },
+  "ear_regular": {
+   "title": "听筒模式",
+   "symbols": [
+    "ear",
+    "ear.fill",
+    "ear.badge.waveform"
+   ]
+  },
+  "earphone_filled": {
+   "title": "耳机",
+   "symbols": [
+    "headphones",
+    "headphones.circle.fill",
+    "airpods"
+   ]
+  },
+  "earphone_regular": {
+   "title": "耳机",
+   "symbols": [
+    "headphones",
+    "earbuds",
+    "headphones.circle"
+   ]
+  },
+  "ecs_icon_colorful_special": {
+   "title": "小店/订单",
+   "symbols": [
+    "storefront.fill",
+    "bag.fill",
+    "basket.fill"
+   ]
+  },
+  "EmoticonFocus": {
+   "title": "选中框",
+   "symbols": [],
+   "decorative": true
+  },
+  "EmotionMsgNoImageBG": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "empty_album_music": {
+   "title": "音乐占位",
+   "symbols": [
+    "music.note",
+    "music.note.list",
+    "music.quarternote.3"
+   ]
+  },
+  "empty_album_music_darkmode": {
+   "title": "音乐占位（深色）",
+   "symbols": [
+    "music.note",
+    "music.note.list",
+    "music.quarternote.3"
+   ]
+  },
+  "enterprisewechat_filled_colorful": {
+   "title": "企业微信",
+   "symbols": [
+    "building.2.fill",
+    "briefcase.fill",
+    "bubble.left.and.bubble.right.fill"
+   ]
+  },
+  "exclamation_mark_circle_filled": {
+   "title": "警告",
+   "symbols": [
+    "exclamationmark.circle.fill",
+    "exclamationmark.triangle.fill",
+    "exclamationmark.octagon.fill"
+   ]
+  },
+  "exclamation_mark_circle_regular": {
+   "title": "警告",
+   "symbols": [
+    "exclamationmark.circle",
+    "exclamationmark.circle.fill",
+    "info.circle"
+   ]
+  },
+  "exclamation_mark_triangle_regular": {
+   "title": "警告",
+   "symbols": [
+    "exclamationmark.triangle",
+    "exclamationmark.triangle.fill",
+    "exclamationmark.circle"
+   ]
+  },
+  "expand_content": {
+   "title": "展开",
+   "symbols": [
+    "arrow.up.left.and.arrow.down.right",
+    "arrow.up.backward.and.arrow.down.forward",
+    "viewfinder"
+   ]
+  },
+  "expand_content_filled": {
+   "title": "展开",
+   "symbols": [
+    "arrow.up.left.and.arrow.down.right",
+    "arrow.up.backward.and.arrow.down.forward",
+    "viewfinder"
+   ]
+  },
+  "favorites_filled": {
+   "title": "收藏",
+   "symbols": [
+    "shippingbox.fill",
+    "cube.fill",
+    "star.fill"
+   ]
+  },
+  "favorites_filled_colorful": {
+   "title": "收藏（彩色）",
+   "symbols": [
+    "cube.fill",
+    "shippingbox.fill",
+    "star.fill"
+   ]
+  },
+  "favorites_regular": {
+   "title": "收藏",
+   "symbols": [
+    "cube",
+    "shippingbox",
+    "star"
+   ]
+  },
+  "fileicon_photo_icon_dark": {
+   "title": "图片文件",
+   "symbols": [
+    "photo.fill",
+    "photo.on.rectangle.angled",
+    "richtext.page.fill"
+   ]
+  },
+  "fileicon_photo_icon_light": {
+   "title": "图片文件",
+   "symbols": [
+    "photo.fill",
+    "photo.on.rectangle.angled",
+    "richtext.page.fill"
+   ]
+  },
+  "fileicon_unknown_icon_dark": {
+   "title": "未知文件",
+   "symbols": [
+    "document.fill",
+    "questionmark.folder.fill",
+    "questionmark.square.fill"
+   ]
+  },
+  "fileicon_unknown_icon_light": {
+   "title": "未知文件",
+   "symbols": [
+    "document.fill",
+    "questionmark.folder.fill",
+    "questionmark.square.fill"
+   ]
+  },
+  "finder_colorring": {
+   "title": "视频号彩环",
+   "symbols": [
+    "music.note",
+    "opticaldisc",
+    "music.quarternote.3"
+   ]
+  },
+  "finder_full_screen_refresh_loading": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "finder_full_screen_video_loading": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "finder_loading_dark": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "finder_loading_light": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "finder_loading_lightV2": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "finder_sector_mask": {
+   "title": "遮罩",
+   "symbols": [],
+   "decorative": true
+  },
+  "FindFriendView_Setting_Arrow": {
+   "title": "右箭头",
+   "symbols": [
+    "chevron.right",
+    "chevron.forward",
+    "arrow.right"
+   ]
+  },
+  "folder_filled": {
+   "title": "文件夹",
+   "symbols": [
+    "folder.fill",
+    "folder.circle.fill",
+    "folder"
+   ]
+  },
+  "GameCenterSearchBtn": {
+   "title": "搜索",
+   "symbols": [
+    "magnifyingglass",
+    "magnifyingglass.circle.fill",
+    "sparkle.magnifyingglass"
+   ]
+  },
+  "gear_regular": {
+   "title": "设置",
+   "symbols": [
+    "gearshape",
+    "gearshape.fill",
+    "gear"
+   ]
+  },
+  "gift_filled_icon": {
+   "title": "礼物",
+   "symbols": [
+    "gift.fill",
+    "giftcard.fill",
+    "gift.circle.fill"
+   ]
+  },
+  "GroupMemberMask": {
+   "title": "遮罩",
+   "symbols": [],
+   "decorative": true
+  },
+  "HeadImageBorder": {
+   "title": "头像边框",
+   "symbols": [],
+   "decorative": true
+  },
+  "HeadImageBorderClick": {
+   "title": "头像边框",
+   "symbols": [],
+   "decorative": true
+  },
+  "heart_filled": {
+   "title": "喜欢",
+   "symbols": [
+    "heart.fill",
+    "heart.circle.fill",
+    "suit.heart.fill"
+   ]
+  },
+  "heart_regular": {
+   "title": "喜欢",
+   "symbols": [
+    "heart",
+    "heart.fill",
+    "heart.circle"
+   ]
+  },
+  "icon_add_more_friends_brand_service": {
+   "title": "服务号",
+   "symbols": [
+    "bag.fill",
+    "storefront.fill",
+    "bag.badge.plus"
+   ]
+  },
+  "icon_color_momentcover": {
+   "title": "朋友圈封面",
+   "symbols": [
+    "photo.fill",
+    "photo.on.rectangle.angled",
+    "camera.aperture"
+   ]
+  },
+  "icon_filled_actionsheet_button": {
+   "title": "按钮背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "icon_filled_brand_head": {
+   "title": "品牌默认头像",
+   "symbols": [
+    "person.crop.circle.fill",
+    "person.circle.fill",
+    "building.2.crop.circle.fill"
+   ]
+  },
+  "icon_filled_brand_head_dark": {
+   "title": "品牌默认头像（深色）",
+   "symbols": [
+    "person.crop.circle.fill",
+    "person.circle.fill",
+    "building.2.crop.circle.fill"
+   ]
+  },
+  "icon_filled_slash": {
+   "title": "斜杠",
+   "symbols": [
+    "line.diagonal",
+    "slash.circle",
+    "minus"
+   ]
+  },
+  "icon_filled_taskbar_entry_music": {
+   "title": "音乐",
+   "symbols": [
+    "music.note",
+    "music.quarternote.3",
+    "music.note.list"
+   ]
+  },
+  "icon_finder_pat_music": {
+   "title": "音乐",
+   "symbols": [
+    "music.note",
+    "opticaldisc",
+    "music.note.list"
+   ]
+  },
+  "icon_music_filled": {
+   "title": "音乐",
+   "symbols": [
+    "music.note",
+    "music.quarternote.3",
+    "music.note.list"
+   ]
+  },
+  "icon_outlined_listen": {
+   "title": "听",
+   "symbols": [
+    "headphones",
+    "ear",
+    "airpods.max"
+   ]
+  },
+  "icon_outlined_picture": {
+   "title": "图片墙",
+   "symbols": [
+    "square.grid.3x2",
+    "photo.on.rectangle.angled",
+    "rectangle.grid.3x2.fill"
+   ]
+  },
+  "icon_outlined_solitaire": {
+   "title": "接龙",
+   "symbols": [
+    "list.number",
+    "number.square.fill",
+    "number.circle.fill"
+   ]
+  },
+  "icon_stick": {
+   "title": "置顶/强提醒",
+   "symbols": [
+    "bubble.left.fill",
+    "megaphone.fill",
+    "pin.fill"
+   ]
+  },
+  "icon_triangle": {
+   "title": "下三角",
+   "symbols": [
+    "arrowtriangle.down.fill",
+    "triangle.fill",
+    "chevron.down"
+   ]
+  },
+  "icons_arrow_right_v4": {
+   "title": "右箭头",
+   "symbols": [
+    "chevron.right",
+    "chevron.forward",
+    "arrow.right"
+   ]
+  },
+  "icons_checkbox_selected": {
+   "title": "已选中",
+   "symbols": [
+    "checkmark.circle.fill",
+    "checkmark.square.fill",
+    "checkmark.seal.fill"
+   ]
+  },
+  "icons_filled_activity": {
+   "title": "活动",
+   "symbols": [
+    "flag.fill",
+    "flag.pattern.checkered",
+    "flag.2.crossed.fill"
+   ]
+  },
+  "icons_filled_appmsg_send": {
+   "title": "发送（微信转 90° 画）",
+   "symbols": [
+    "arrow.down.to.line",
+    "arrow.down",
+    "square.and.arrow.down"
+   ]
+  },
+  "icons_filled_close5": {
+   "title": "关闭",
+   "symbols": [
+    "xmark",
+    "xmark.circle.fill",
+    "xmark.square.fill"
+   ]
+  },
+  "icons_filled_colorful_female": {
+   "title": "女",
+   "symbols": [
+    "figure.stand.dress",
+    "person.fill",
+    "figure.stand"
+   ]
+  },
+  "icons_filled_comment_full": {
+   "title": "评论",
+   "symbols": [
+    "bubble.left.fill",
+    "message.fill",
+    "ellipsis.bubble.fill"
+   ]
+  },
+  "icons_filled_dot2": {
+   "title": "小圆点",
+   "symbols": [
+    "circle.fill",
+    "smallcircle.filled.circle",
+    "circlebadge.fill"
+   ]
+  },
+  "icons_filled_emoticon_bg": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "icons_filled_finder_arrow_down": {
+   "title": "向下",
+   "symbols": [
+    "arrow.down",
+    "arrow.down.circle.fill",
+    "chevron.down"
+   ]
+  },
+  "icons_filled_finder_red_envelope": {
+   "title": "红包",
+   "symbols": [
+    "envelope.fill",
+    "envelope.open.fill",
+    "gift.fill"
+   ]
+  },
+  "icons_filled_grouptool": {
+   "title": "群工具",
+   "symbols": [
+    "circle.grid.2x2.fill",
+    "square.grid.2x2.fill",
+    "circle.grid.3x3.fill"
+   ]
+  },
+  "icons_filled_img_locate_preview": {
+   "title": "定位到聊天位置",
+   "symbols": [
+    "arrow.up.left.circle.fill",
+    "text.bubble.fill",
+    "scope"
+   ]
+  },
+  "icons_filled_img_photowall": {
+   "title": "照片墙",
+   "symbols": [
+    "square.grid.3x3.fill",
+    "square.grid.2x2.fill",
+    "photo.stack.fill"
+   ]
+  },
+  "icons_filled_like_finder": {
+   "title": "喜欢",
+   "symbols": [
+    "heart.fill",
+    "heart.circle.fill",
+    "suit.heart.fill"
+   ]
+  },
+  "icons_filled_like_full": {
+   "title": "喜欢",
+   "symbols": [
+    "heart.fill",
+    "heart.circle.fill",
+    "suit.heart.fill"
+   ]
+  },
+  "icons_filled_like_group": {
+   "title": "朋友喜欢",
+   "symbols": [
+    "heart.fill",
+    "person.2.fill",
+    "heart.circle.fill"
+   ]
+  },
+  "icons_filled_live": {
+   "title": "直播",
+   "symbols": [
+    "record.circle.fill",
+    "dot.radiowaves.left.and.right",
+    "antenna.radiowaves.left.and.right"
+   ]
+  },
+  "icons_filled_live_photo": {
+   "title": "实况照片",
+   "symbols": [
+    "livephoto",
+    "livephoto.play",
+    "circle.dotted.circle"
+   ]
+  },
+  "icons_filled_livephoto": {
+   "title": "实况照片",
+   "symbols": [
+    "livephoto.play",
+    "livephoto",
+    "play.circle"
+   ]
+  },
+  "icons_filled_loading": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "icons_filled_minimize_regular": {
+   "title": "小窗",
+   "symbols": [
+    "pip.enter",
+    "rectangle.portrait.on.rectangle.portrait",
+    "pip"
+   ]
+  },
+  "icons_filled_moon": {
+   "title": "月亮",
+   "symbols": [
+    "moon.fill",
+    "moon.stars.fill",
+    "circle.fill"
+   ]
+  },
+  "icons_filled_multiple_choice": {
+   "title": "多选",
+   "symbols": [
+    "checklist",
+    "list.bullet",
+    "checkmark.circle"
+   ]
+  },
+  "icons_filled_new_search": {
+   "title": "搜索",
+   "symbols": [
+    "magnifyingglass",
+    "magnifyingglass.circle.fill",
+    "sparkle.magnifyingglass"
+   ]
+  },
+  "icons_filled_play3": {
+   "title": "播放",
+   "symbols": [
+    "play.fill",
+    "play.circle.fill",
+    "play"
+   ]
+  },
+  "icons_filled_poparrow": {
+   "title": "气泡尖角",
+   "symbols": [],
+   "decorative": true
+  },
+  "icons_filled_quote": {
+   "title": "引用",
+   "symbols": [
+    "quote.bubble.fill",
+    "text.quote",
+    "quote.opening"
+   ]
+  },
+  "icons_filled_red_envelope": {
+   "title": "红包",
+   "symbols": [
+    "envelope.fill",
+    "gift.fill",
+    "bag.fill"
+   ]
+  },
+  "icons_filled_shocked_group": {
+   "title": "群里炸了",
+   "symbols": [
+    "flame.fill",
+    "bolt.heart.fill",
+    "exclamationmark.bubble.fill"
+   ]
+  },
+  "icons_filled_sight_play": {
+   "title": "视频播放",
+   "symbols": [
+    "play.fill",
+    "play.circle.fill",
+    "play"
+   ]
+  },
+  "icons_filled_specialplay": {
+   "title": "播放",
+   "symbols": [
+    "play.fill",
+    "play.circle.fill",
+    "play"
+   ]
+  },
+  "icons_filled_state": {
+   "title": "状态",
+   "symbols": [
+    "circle.dashed",
+    "sparkles",
+    "circle"
+   ]
+  },
+  "icons_filled_ting_finder_entry_music": {
+   "title": "音乐",
+   "symbols": [
+    "music.note",
+    "music.quarternote.3",
+    "music.note.list"
+   ]
+  },
+  "icons_filled_top": {
+   "title": "回到顶部",
+   "symbols": [
+    "arrow.up.to.line",
+    "arrow.up.to.line.compact",
+    "arrow.up.circle.fill"
+   ]
+  },
+  "icons_filled_video_phone": {
+   "title": "音视频通话",
+   "symbols": [
+    "video.fill",
+    "phone.fill",
+    "phone.badge.waveform.fill"
+   ]
+  },
+  "icons_filled_voiceinput_white": {
+   "title": "语音输入",
+   "symbols": [
+    "microphone.fill",
+    "microphone.circle.fill",
+    "waveform"
+   ]
+  },
+  "icons_filled_wechatpay": {
+   "title": "微信支付",
+   "symbols": [
+    "checkmark.bubble.fill",
+    "checkmark.message.fill",
+    "yensign.circle.fill"
+   ]
+  },
+  "icons_filled_WeChatSearchEmblem": {
+   "title": "搜一搜",
+   "symbols": [
+    "sparkle.magnifyingglass",
+    "asterisk",
+    "sparkles"
+   ]
+  },
+  "icons_finder_default_avatar": {
+   "title": "视频号默认头像",
+   "symbols": [
+    "person.crop.circle.fill",
+    "person.circle.fill",
+    "person.fill"
+   ]
+  },
+  "icons_finder_filled_play": {
+   "title": "播放",
+   "symbols": [
+    "play.fill",
+    "play.circle.fill",
+    "play"
+   ]
+  },
+  "icons_finder_follow_add": {
+   "title": "关注 +",
+   "symbols": [
+    "plus",
+    "plus.circle.fill",
+    "person.badge.plus"
+   ]
+  },
+  "icons_finder_new_minimize": {
+   "title": "小窗",
+   "symbols": [
+    "pip.enter",
+    "rectangle.on.rectangle",
+    "pip"
+   ]
+  },
+  "icons_finder_rotate": {
+   "title": "旋转",
+   "symbols": [
+    "rotate.right",
+    "crop.rotate",
+    "rectangle.portrait.rotate"
+   ]
+  },
+  "icons_finder_timeline_me": {
+   "title": "我",
+   "symbols": [
+    "person",
+    "person.fill",
+    "person.crop.circle"
+   ]
+  },
+  "icons_outlined_addoutline": {
+   "title": "添加",
+   "symbols": [
+    "plus.circle",
+    "plus.circle.fill",
+    "plus"
+   ]
+  },
+  "icons_outlined_arrow_down_2": {
+   "title": "向下箭头",
+   "symbols": [
+    "chevron.down",
+    "chevron.compact.down",
+    "arrowtriangle.down.fill"
+   ]
+  },
+  "icons_outlined_autoplay_next_on": {
+   "title": "自动连播",
+   "symbols": [
+    "arrow.up.square",
+    "play.square.stack",
+    "forward.end"
+   ]
+  },
+  "icons_outlined_brand_mask": {
+   "title": "遮罩",
+   "symbols": [],
+   "decorative": true
+  },
+  "icons_outlined_channels_comment": {
+   "title": "评论",
+   "symbols": [
+    "bubble.left",
+    "message",
+    "text.bubble"
+   ]
+  },
+  "icons_outlined_channels_good": {
+   "title": "点赞",
+   "symbols": [
+    "hand.thumbsup",
+    "hand.thumbsup.fill",
+    "hand.thumbsup.circle"
+   ]
+  },
+  "icons_outlined_channels_like": {
+   "title": "喜欢",
+   "symbols": [
+    "heart",
+    "heart.fill",
+    "heart.circle"
+   ]
+  },
+  "icons_outlined_channels_like_off": {
+   "title": "不喜欢",
+   "symbols": [
+    "heart.slash",
+    "heart.slash.fill",
+    "heart.slash.circle"
+   ]
+  },
+  "icons_outlined_channels_like_thick": {
+   "title": "喜欢",
+   "symbols": [
+    "heart",
+    "heart.fill",
+    "heart.circle"
+   ]
+  },
+  "icons_outlined_channels_share": {
+   "title": "转发",
+   "symbols": [
+    "arrowshape.turn.up.right",
+    "arrowshape.turn.up.right.fill",
+    "square.and.arrow.up"
+   ]
+  },
+  "icons_outlined_channels_turn": {
+   "title": "横屏",
+   "symbols": [
+    "rotate.right",
+    "rectangle.portrait.rotate",
+    "arrow.clockwise"
+   ]
+  },
+  "icons_outlined_close_subtitle": {
+   "title": "关闭字幕",
+   "symbols": [
+    "captions.bubble",
+    "text.bubble",
+    "lock.rectangle"
+   ]
+  },
+  "icons_outlined_colorful_favorites": {
+   "title": "我：收藏",
+   "symbols": [
+    "cube",
+    "shippingbox",
+    "star"
+   ]
+  },
+  "icons_outlined_colorful_favorites_dark": {
+   "title": "我：收藏（深色）",
+   "symbols": [
+    "cube",
+    "shippingbox",
+    "star"
+   ]
+  },
+  "icons_outlined_colorful_game": {
+   "title": "发现：游戏",
+   "symbols": [
+    "gamecontroller.fill",
+    "gamecontroller",
+    "puzzlepiece.fill"
+   ]
+  },
+  "icons_outlined_colorful_game_dark": {
+   "title": "发现：游戏（深色）",
+   "symbols": [
+    "gamecontroller.fill",
+    "gamecontroller",
+    "puzzlepiece.fill"
+   ]
+  },
+  "icons_outlined_colorful_moment": {
+   "title": "发现：朋友圈",
+   "symbols": [
+    "camera.aperture",
+    "circle.hexagongrid.fill",
+    "sparkles"
+   ]
+  },
+  "icons_outlined_colorful_moment_dark": {
+   "title": "发现：朋友圈（深色）",
+   "symbols": [
+    "camera.aperture",
+    "circle.hexagongrid.fill",
+    "sparkles"
+   ]
+  },
+  "icons_outlined_delete_emoji": {
+   "title": "删除表情",
+   "symbols": [
+    "delete.left",
+    "delete.left.fill",
+    "xmark.square"
+   ]
+  },
+  "icons_outlined_double_arrow": {
+   "title": "双箭头向上",
+   "symbols": [
+    "chevron.up.2",
+    "chevron.compact.up",
+    "arrow.up.circle"
+   ]
+  },
+  "icons_outlined_double_fire": {
+   "title": "互动",
+   "symbols": [
+    "heart.circle",
+    "arrow.uturn.right.circle",
+    "flame"
+   ]
+  },
+  "icons_outlined_find_content": {
+   "title": "查找聊天内容",
+   "symbols": [
+    "text.page.badge.magnifyingglass",
+    "text.magnifyingglass",
+    "magnifyingglass"
+   ]
+  },
+  "icons_outlined_finder": {
+   "title": "视频号",
+   "symbols": [
+    "infinity",
+    "play.rectangle.on.rectangle",
+    "film"
+   ]
+  },
+  "icons_outlined_firecrackers": {
+   "title": "鞭炮",
+   "symbols": [
+    "party.popper",
+    "fireworks",
+    "sparkles"
+   ]
+  },
+  "icons_outlined_float_window_on": {
+   "title": "浮窗",
+   "symbols": [
+    "circle.circle",
+    "record.circle",
+    "pip.fill"
+   ]
+  },
+  "icons_outlined_font": {
+   "title": "字体",
+   "symbols": [
+    "textformat.size",
+    "textformat",
+    "character"
+   ]
+  },
+  "icons_outlined_gobackward_10": {
+   "title": "后退 10 秒",
+   "symbols": [
+    "10.arrow.trianglehead.counterclockwise",
+    "backward.fill",
+    "arrow.counterclockwise"
+   ]
+  },
+  "icons_outlined_goforward_10": {
+   "title": "前进 10 秒",
+   "symbols": [
+    "10.arrow.trianglehead.clockwise",
+    "forward.fill",
+    "arrow.clockwise"
+   ]
+  },
+  "icons_outlined_icloud": {
+   "title": "iCloud",
+   "symbols": [
+    "icloud",
+    "icloud.fill",
+    "cloud"
+   ]
+  },
+  "icons_outlined_like_1.5pt": {
+   "title": "喜欢",
+   "symbols": [
+    "heart",
+    "heart.fill",
+    "heart.circle"
+   ]
+  },
+  "icons_outlined_limited_mode": {
+   "title": "青少年模式",
+   "symbols": [
+    "umbrella",
+    "umbrella.fill",
+    "shield.lefthalf.filled"
+   ]
+  },
+  "icons_outlined_listen_later": {
+   "title": "稍后听",
+   "symbols": [
+    "text.badge.plus",
+    "list.bullet",
+    "headphones"
+   ]
+  },
+  "icons_outlined_loading_light": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "icons_outlined_miniprogram": {
+   "title": "小程序",
+   "symbols": [
+    "link.circle",
+    "link.circle.fill",
+    "link"
+   ]
+  },
+  "icons_outlined_ocr": {
+   "title": "提取文字",
+   "symbols": [
+    "text.viewfinder",
+    "character.textbox",
+    "document.viewfinder"
+   ]
+  },
+  "icons_outlined_play1": {
+   "title": "播放",
+   "symbols": [
+    "play",
+    "play.fill",
+    "play.circle"
+   ]
+  },
+  "icons_outlined_play_quickly2": {
+   "title": "倍速",
+   "symbols": [
+    "forward.circle",
+    "forward.fill",
+    "arrow.clockwise"
+   ]
+  },
+  "icons_outlined_playBtn": {
+   "title": "播放",
+   "symbols": [
+    "play.circle",
+    "play.circle.fill",
+    "play.fill"
+   ]
+  },
+  "icons_outlined_search_full": {
+   "title": "搜索",
+   "symbols": [
+    "magnifyingglass",
+    "magnifyingglass.circle",
+    "sparkle.magnifyingglass"
+   ]
+  },
+  "icons_outlined_searchlogo": {
+   "title": "搜一搜",
+   "symbols": [
+    "sparkle.magnifyingglass",
+    "asterisk",
+    "sparkles"
+   ]
+  },
+  "icons_outlined_session_arrow_down": {
+   "title": "会话列表箭头（微信转 180° 画）",
+   "symbols": [
+    "chevron.down",
+    "chevron.compact.down",
+    "arrow.down"
+   ]
+  },
+  "icons_outlined_slider_indicator": {
+   "title": "上下滑动",
+   "symbols": [
+    "chevron.up.chevron.down",
+    "arrow.up.arrow.down",
+    "arrow.up.and.down"
+   ]
+  },
+  "icons_outlined_stickychat": {
+   "title": "置顶聊天",
+   "symbols": [
+    "pin",
+    "pin.fill",
+    "list.bullet"
+   ]
+  },
+  "icons_outlined_stickychat_dark": {
+   "title": "置顶聊天（深色）",
+   "symbols": [
+    "pin",
+    "pin.fill",
+    "list.bullet"
+   ]
+  },
+  "icons_outlined_subtitle": {
+   "title": "字幕",
+   "symbols": [
+    "captions.bubble",
+    "text.bubble",
+    "character.bubble"
+   ]
+  },
+  "icons_outlined_takephoto_nor": {
+   "title": "拍摄表情",
+   "symbols": [
+    "hands.and.sparkles",
+    "hand.wave",
+    "camera"
+   ]
+  },
+  "icons_outlined_wallet": {
+   "title": "钱包",
+   "symbols": [
+    "wallet.bifold",
+    "wallet.pass",
+    "creditcard"
+   ]
+  },
+  "icons_outlined_wechatpay": {
+   "title": "微信支付",
+   "symbols": [
+    "checkmark.bubble",
+    "checkmark.message",
+    "yensign.circle"
+   ]
+  },
+  "icons_webview_custom_menu_pdd_bybt": {
+   "title": "百亿补贴",
+   "symbols": [
+    "yensign.circle",
+    "yensign.square",
+    "bag"
+   ]
+  },
+  "icons_webview_custom_menu_pdd_categories": {
+   "title": "分类",
+   "symbols": [
+    "list.bullet",
+    "square.grid.2x2",
+    "list.bullet.rectangle"
+   ]
+  },
+  "icons_webview_custom_menu_pdd_favorite": {
+   "title": "收藏",
+   "symbols": [
+    "bag",
+    "heart.square",
+    "heart.text.square"
+   ]
+  },
+  "icons_webview_custom_menu_pdd_index": {
+   "title": "首页",
+   "symbols": [
+    "house",
+    "house.fill",
+    "house.circle"
+   ]
+  },
+  "icons_webview_custom_menu_pdd_profile": {
+   "title": "我的",
+   "symbols": [
+    "person",
+    "person.fill",
+    "person.crop.circle"
+   ]
+  },
+  "icons_xmark_heavy": {
+   "title": "关闭",
+   "symbols": [
+    "xmark",
+    "xmark.circle.fill",
+    "xmark.square.fill"
+   ]
+  },
+  "keyboard_circle_regular": {
+   "title": "键盘",
+   "symbols": [
+    "keyboard",
+    "keyboard.fill",
+    "keyboard.badge.ellipsis"
+   ]
+  },
+  "link_regular": {
+   "title": "链接",
+   "symbols": [
+    "link",
+    "link.circle",
+    "link.circle.fill"
+   ]
+  },
+  "live_icon": {
+   "title": "直播",
+   "symbols": [
+    "record.circle",
+    "dot.radiowaves.left.and.right",
+    "circle.fill"
+   ]
+  },
+  "livephoto_on_filled": {
+   "title": "实况照片",
+   "symbols": [
+    "livephoto",
+    "livephoto.play",
+    "circle.dotted.circle"
+   ]
+  },
+  "loadingBkg": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "location_filled": {
+   "title": "位置",
+   "symbols": [
+    "mappin",
+    "mappin.circle.fill",
+    "location.fill"
+   ]
+  },
+  "location_regular": {
+   "title": "位置",
+   "symbols": [
+    "mappin",
+    "mappin.and.ellipse",
+    "location"
+   ]
+  },
+  "lock_filled": {
+   "title": "锁",
+   "symbols": [
+    "lock.fill",
+    "lock.circle.fill",
+    "lock"
+   ]
+  },
+  "magnifying_glass_filled": {
+   "title": "搜索",
+   "symbols": [
+    "magnifyingglass",
+    "magnifyingglass.circle.fill",
+    "sparkle.magnifyingglass"
+   ]
+  },
+  "magnifying_glass_home_tab": {
+   "title": "搜索",
+   "symbols": [
+    "magnifyingglass",
+    "magnifyingglass.circle.fill",
+    "sparkle.magnifyingglass"
+   ]
+  },
+  "magnifying_glass_regular": {
+   "title": "搜索",
+   "symbols": [
+    "magnifyingglass",
+    "magnifyingglass.circle",
+    "sparkle.magnifyingglass"
+   ]
+  },
+  "max_window_filled": {
+   "title": "全屏",
+   "symbols": [
+    "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left",
+    "arrow.up.left.and.arrow.down.right",
+    "viewfinder"
+   ]
+  },
+  "mike_on_filled": {
+   "title": "麦克风",
+   "symbols": [
+    "microphone.fill",
+    "microphone.circle.fill",
+    "microphone"
+   ]
+  },
+  "mike_on_heavy": {
+   "title": "麦克风",
+   "symbols": [
+    "microphone",
+    "microphone.fill",
+    "microphone.circle"
+   ]
+  },
+  "mini_program_filled": {
+   "title": "小程序",
+   "symbols": [
+    "link",
+    "link.circle.fill",
+    "link.circle"
+   ]
+  },
+  "minimize_play_audio": {
+   "title": "小窗音频",
+   "symbols": [
+    "ear",
+    "speaker.wave.2",
+    "headphones"
+   ]
+  },
+  "minimize_xmark": {
+   "title": "关闭",
+   "symbols": [
+    "xmark",
+    "xmark.circle.fill",
+    "xmark.square.fill"
+   ]
+  },
+  "Miniprogram_Icon_Default": {
+   "title": "小程序默认图标",
+   "symbols": [
+    "link.circle.fill",
+    "link.circle",
+    "app.fill"
+   ]
+  },
+  "Miniprogram_Icon_DefaultDM": {
+   "title": "小程序默认图标（深色）",
+   "symbols": [
+    "link.circle.fill",
+    "link.circle",
+    "app.fill"
+   ]
+  },
+  "Moment_Navigation Bar_Shadow": {
+   "title": "阴影",
+   "symbols": [],
+   "decorative": true
+  },
+  "moments_spring_firecrackers": {
+   "title": "春节鞭炮",
+   "symbols": [
+    "fireworks",
+    "party.popper.fill",
+    "sparkles"
+   ]
+  },
+  "more_live_voice_edu_icon": {
+   "title": "声音",
+   "symbols": [
+    "wave.3.right",
+    "speaker.wave.2",
+    "waveform"
+   ]
+  },
+  "nearby_regular": {
+   "title": "附近",
+   "symbols": [
+    "person.wave.2",
+    "dot.radiowaves.left.and.right",
+    "location.circle"
+   ]
+  },
+  "NewFriend_Contacts_icon": {
+   "title": "手机通讯录",
+   "symbols": [
+    "iphone",
+    "person.crop.rectangle.stack",
+    "phone.circle.fill"
+   ]
+  },
+  "news_filled": {
+   "title": "看一看",
+   "symbols": [
+    "seal.fill",
+    "rosette",
+    "staroflife.fill"
+   ]
+  },
+  "news_regular": {
+   "title": "看一看",
+   "symbols": [
+    "seal",
+    "rosette",
+    "staroflife"
+   ]
+  },
+  "official_accounts_new_regular": {
+   "title": "公众号",
+   "symbols": [
+    "book",
+    "book.fill",
+    "newspaper"
+   ]
+  },
+  "openim_group_icon": {
+   "title": "企业微信群",
+   "symbols": [
+    "building.2.fill",
+    "bubble.left.and.bubble.right.fill",
+    "briefcase.fill"
+   ]
+  },
+  "pause_filled": {
+   "title": "暂停",
+   "symbols": [
+    "pause.fill",
+    "pause.circle.fill",
+    "pause"
+   ]
+  },
+  "pay_regular": {
+   "title": "支付",
+   "symbols": [
+    "creditcard",
+    "checkmark.seal",
+    "qrcode.viewfinder"
+   ]
+  },
+  "Payloading_01": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "Payloading_02": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "Payloading_03": {
+   "title": "加载动画",
+   "symbols": [],
+   "decorative": true
+  },
+  "pencil_rectangle_regular": {
+   "title": "编辑",
+   "symbols": [
+    "square.and.pencil",
+    "pencil.line",
+    "applepencil"
+   ]
+  },
+  "person_2_filled": {
+   "title": "多人",
+   "symbols": [
+    "person.2.fill",
+    "person.3.fill",
+    "person.2.circle.fill"
+   ]
+  },
+  "person_2_regular": {
+   "title": "通讯录",
+   "symbols": [
+    "person.2",
+    "person.2.fill",
+    "person.crop.rectangle.stack"
+   ]
+  },
+  "person_filled": {
+   "title": "人",
+   "symbols": [
+    "person.fill",
+    "person.crop.circle.fill",
+    "person"
+   ]
+  },
+  "person_plus_regular": {
+   "title": "添加朋友",
+   "symbols": [
+    "person.badge.plus",
+    "person.fill.badge.plus",
+    "person.crop.circle.badge.plus"
+   ]
+  },
+  "person_regular": {
+   "title": "我",
+   "symbols": [
+    "person",
+    "person.fill",
+    "person.crop.circle"
+   ]
+  },
+  "phone_rectangle_regular": {
+   "title": "手机联系人",
+   "symbols": [
+    "iphone",
+    "phone",
+    "phone.circle"
+   ]
+  },
+  "phone_video_regular": {
+   "title": "音视频通话",
+   "symbols": [
+    "video",
+    "phone",
+    "phone.badge.waveform"
+   ]
+  },
+  "photo_accounts_icon": {
+   "title": "图文账号",
+   "symbols": [
+    "photo.stack.fill",
+    "square.stack.fill",
+    "rhombus.fill"
+   ]
+  },
+  "photo_works_colorful_icon": {
+   "title": "作品（彩色）",
+   "symbols": [
+    "square.on.square",
+    "rectangle.stack",
+    "photo.stack"
+   ]
+  },
+  "photo_works_solid_icon": {
+   "title": "作品",
+   "symbols": [
+    "square.fill.on.square.fill",
+    "rectangle.stack.fill",
+    "photo.stack.fill"
+   ]
+  },
+  "picture_filled": {
+   "title": "图片",
+   "symbols": [
+    "photo.fill",
+    "photo.circle.fill",
+    "photo.on.rectangle.angled"
+   ]
+  },
+  "picture_regular": {
+   "title": "图片",
+   "symbols": [
+    "photo",
+    "photo.fill",
+    "photo.on.rectangle"
+   ]
+  },
+  "placeholder_voice_plazza": {
+   "title": "占位图",
+   "symbols": [],
+   "decorative": true
+  },
+  "placeholder_voice_plazza_darkmode": {
+   "title": "占位图",
+   "symbols": [],
+   "decorative": true
+  },
+  "play_filled": {
+   "title": "播放",
+   "symbols": [
+    "play.fill",
+    "play.circle.fill",
+    "play"
+   ]
+  },
+  "player_volume_dot": {
+   "title": "滑块",
+   "symbols": [],
+   "decorative": true
+  },
+  "player_volume_muted": {
+   "title": "静音",
+   "symbols": [
+    "speaker.slash",
+    "speaker.slash.fill",
+    "speaker.slash.circle"
+   ]
+  },
+  "player_volume_slider": {
+   "title": "滑块",
+   "symbols": [],
+   "decorative": true
+  },
+  "player_volume_slider_active": {
+   "title": "滑块",
+   "symbols": [],
+   "decorative": true
+  },
+  "playerShadowBottom": {
+   "title": "阴影",
+   "symbols": [],
+   "decorative": true
+  },
+  "plugins_FriendNotify": {
+   "title": "新的朋友",
+   "symbols": [
+    "person.badge.plus",
+    "person.crop.circle.badge.plus",
+    "person.fill.badge.plus"
+   ]
+  },
+  "plus_filled": {
+   "title": "添加",
+   "symbols": [
+    "plus",
+    "plus.circle.fill",
+    "plus.square.fill"
+   ]
+  },
+  "plus_regular": {
+   "title": "添加",
+   "symbols": [
+    "plus",
+    "plus.circle",
+    "plus.square"
+   ]
+  },
+  "ProfileHeadImageBorder": {
+   "title": "头像边框",
+   "symbols": [],
+   "decorative": true
+  },
+  "ProfileHeadImageBorderClick": {
+   "title": "头像边框",
+   "symbols": [],
+   "decorative": true
+  },
+  "qqEmojiTips": {
+   "title": "提示框背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "qr_code_regular": {
+   "title": "二维码",
+   "symbols": [
+    "qrcode",
+    "qrcode.viewfinder",
+    "barcode.viewfinder"
+   ]
+  },
+  "quick_send_weapp_msg_bubble": {
+   "title": "气泡背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "quick_send_weapp_msg_default_image": {
+   "title": "占位图",
+   "symbols": [],
+   "decorative": true
+  },
+  "radar_regular": {
+   "title": "雷达加朋友",
+   "symbols": [
+    "scope",
+    "dot.radiowaves.left.and.right",
+    "antenna.radiowaves.left.and.right"
+   ]
+  },
+  "ReadVerified_icon_new": {
+   "title": "阅读认证",
+   "symbols": [
+    "book.fill",
+    "checkmark.seal.fill",
+    "book.closed.fill"
+   ]
+  },
+  "ReceiverImageNodeMask": {
+   "title": "遮罩",
+   "symbols": [],
+   "decorative": true
+  },
+  "recent_forwardred_delete": {
+   "title": "删除",
+   "symbols": [
+    "minus.circle.fill",
+    "xmark.circle.fill",
+    "trash.circle.fill"
+   ]
+  },
+  "rectangle_4_filled": {
+   "title": "小程序面板",
+   "symbols": [
+    "square.grid.2x2.fill",
+    "circle.grid.2x2.fill",
+    "rectangle.3.group.fill"
+   ]
+  },
+  "refresh_filled": {
+   "title": "刷新",
+   "symbols": [
+    "arrow.clockwise",
+    "arrow.clockwise.circle.fill",
+    "arrow.trianglehead.2.clockwise"
+   ]
+  },
+  "refresh_regular": {
+   "title": "刷新",
+   "symbols": [
+    "arrow.clockwise",
+    "arrow.clockwise.circle",
+    "arrow.trianglehead.2.clockwise"
+   ]
+  },
+  "scan_regular": {
+   "title": "转发聊天",
+   "symbols": [
+    "bubble.left.and.bubble.right",
+    "qrcode.viewfinder",
+    "viewfinder"
+   ]
+  },
+  "search_filled": {
+   "title": "搜一搜",
+   "symbols": [
+    "sparkle.magnifyingglass",
+    "asterisk",
+    "sparkles"
+   ]
+  },
+  "SenderImageNodeMask": {
+   "title": "遮罩",
+   "symbols": [],
+   "decorative": true
+  },
+  "SentScreenSnipBtn": {
+   "title": "按钮背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "SentScreenSnipBtnHL": {
+   "title": "按钮背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "SettingProfileHead": {
+   "title": "设置头像",
+   "symbols": [
+    "camera.fill",
+    "person.crop.circle.fill",
+    "person.crop.circle.badge.plus"
+   ]
+  },
+  "share_filled": {
+   "title": "分享",
+   "symbols": [
+    "arrowshape.turn.up.right.fill",
+    "arrowshape.turn.up.right.circle.fill",
+    "square.and.arrow.up.fill"
+   ]
+  },
+  "share_regular": {
+   "title": "分享",
+   "symbols": [
+    "arrowshape.turn.up.right",
+    "square.and.arrow.up",
+    "arrowshape.turn.up.right.circle"
+   ]
+  },
+  "smile_filled": {
+   "title": "表情",
+   "symbols": [
+    "face.smiling.inverse",
+    "face.smiling",
+    "theatermasks.fill"
+   ]
+  },
+  "smile_regular": {
+   "title": "表情",
+   "symbols": [
+    "face.smiling",
+    "face.smiling.inverse",
+    "theatermasks"
+   ]
+  },
+  "star_3_line_regular": {
+   "title": "星标",
+   "symbols": [
+    "star",
+    "star.fill",
+    "star.circle"
+   ]
+  },
+  "star_filled": {
+   "title": "星标",
+   "symbols": [
+    "star.fill",
+    "star.circle.fill",
+    "sparkles"
+   ]
+  },
+  "star_heavy": {
+   "title": "星标",
+   "symbols": [
+    "star",
+    "star.fill",
+    "star.circle"
+   ]
+  },
+  "star_regular": {
+   "title": "星标",
+   "symbols": [
+    "star",
+    "star.fill",
+    "star.circle"
+   ]
+  },
+  "status_view_icon": {
+   "title": "状态",
+   "symbols": [
+    "figure.walk",
+    "figure.walk.motion",
+    "figure.run"
+   ]
+  },
+  "tag_regular": {
+   "title": "标签",
+   "symbols": [
+    "tag",
+    "tag.fill",
+    "tag.circle"
+   ]
+  },
+  "TaskBar_Default_Video": {
+   "title": "任务栏默认视频",
+   "symbols": [
+    "play.rectangle.fill",
+    "video.fill",
+    "film.fill"
+   ]
+  },
+  "TaskBar_Default_Web": {
+   "title": "任务栏默认网页",
+   "symbols": [
+    "richtext.page.fill",
+    "globe",
+    "safari.fill"
+   ]
+  },
+  "Text_Bubble_Receiver_White_HL": {
+   "title": "聊天气泡背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "text_state_default_image_11": {
+   "title": "占位图",
+   "symbols": [],
+   "decorative": true
+  },
+  "text_state_icon_unread_bubble": {
+   "title": "未读气泡",
+   "symbols": [
+    "ellipsis.bubble.fill",
+    "bubble.left.fill",
+    "text.bubble.fill"
+   ]
+  },
+  "thankful_flower_heavy": {
+   "title": "送花",
+   "symbols": [
+    "camera.macro",
+    "leaf.fill",
+    "laurel.leading"
+   ]
+  },
+  "ThumbImageBkg": {
+   "title": "背景",
+   "symbols": [],
+   "decorative": true
+  },
+  "transfer_filled": {
+   "title": "转账",
+   "symbols": [
+    "arrow.left.arrow.right",
+    "arrow.left.arrow.right.circle.fill",
+    "arrow.2.squarepath"
+   ]
+  },
+  "translate_filled": {
+   "title": "翻译",
+   "symbols": [
+    "translate",
+    "character.bubble.fill",
+    "textformat.alt"
+   ]
+  },
+  "translate_regular": {
+   "title": "翻译",
+   "symbols": [
+    "translate",
+    "character.bubble",
+    "textformat.alt"
+   ]
+  },
+  "trash_on_filled": {
+   "title": "删除",
+   "symbols": [
+    "trash.fill",
+    "trash.circle.fill",
+    "trash"
+   ]
+  },
+  "trash_on_regular": {
+   "title": "删除",
+   "symbols": [
+    "trash",
+    "trash.fill",
+    "trash.circle"
+   ]
+  },
+  "underline_marker": {
+   "title": "划线",
+   "symbols": [
+    "highlighter",
+    "pencil.line",
+    "underline"
+   ]
+  },
+  "upper_float_shadow": {
+   "title": "阴影",
+   "symbols": [],
+   "decorative": true
+  },
+  "voice_circle_regular": {
+   "title": "语音",
+   "symbols": [
+    "speaker.wave.2.circle",
+    "waveform.circle",
+    "microphone.circle"
+   ]
+  },
+  "VoiceBgMask": {
+   "title": "遮罩",
+   "symbols": [],
+   "decorative": true
+  },
+  "voip_answer_mask_icons": {
+   "title": "微信",
+   "symbols": [
+    "bubble.left.and.bubble.right.fill",
+    "message.fill",
+    "bubble.left.and.bubble.right"
+   ]
+  },
+  "volume_off_regular": {
+   "title": "静音",
+   "symbols": [
+    "speaker.slash",
+    "speaker.slash.fill",
+    "speaker.slash.circle"
+   ]
+  },
+  "volume_on_regular": {
+   "title": "声音",
+   "symbols": [
+    "speaker.wave.2",
+    "speaker.wave.2.fill",
+    "speaker.wave.3"
+   ]
+  },
+  "WAMainFrame_CloseArrow": {
+   "title": "收起",
+   "symbols": [
+    "chevron.up",
+    "chevron.compact.up",
+    "arrow.up"
+   ]
+  },
+  "weapp_capsule_exit": {
+   "title": "小程序退出",
+   "symbols": [
+    "record.circle",
+    "circle.circle",
+    "xmark.circle"
+   ]
+  },
+  "weapp_capsule_more": {
+   "title": "小程序更多",
+   "symbols": [
+    "ellipsis",
+    "ellipsis.circle",
+    "ellipsis.circle.fill"
+   ]
+  },
+  "weapp_corner_icon_dark": {
+   "title": "小程序角标（深色）",
+   "symbols": [
+    "link.circle.fill",
+    "link.circle",
+    "link"
+   ]
+  },
+  "weapp_corner_icon_light": {
+   "title": "小程序角标",
+   "symbols": [
+    "link.circle.fill",
+    "link.circle",
+    "link"
+   ]
+  },
+  "weapp_icon_debug": {
+   "title": "小程序调试",
+   "symbols": [
+    "apple.terminal",
+    "apple.terminal.fill",
+    "chevron.left.forwardslash.chevron.right"
+   ]
+  },
+  "WebView_Back_Shadow": {
+   "title": "阴影",
+   "symbols": [],
+   "decorative": true
+  },
+  "WeChat_Lab_Logo_light_small": {
+   "title": "微信实验室",
+   "symbols": [
+    "lightbulb",
+    "lightbulb.fill",
+    "flask"
+   ]
+  },
+  "xmark_circle_filled": {
+   "title": "关闭",
+   "symbols": [
+    "xmark.circle.fill",
+    "xmark",
+    "xmark.square.fill"
+   ]
+  },
+  "xmark_circle_regular": {
+   "title": "关闭",
+   "symbols": [
+    "xmark.circle",
+    "xmark",
+    "xmark.circle.fill"
+   ]
+  },
+  "xmark_filled": {
+   "title": "关闭",
+   "symbols": [
+    "xmark",
+    "xmark.circle.fill",
+    "xmark.square.fill"
+   ]
+  },
+  "xmark_regular": {
+   "title": "关闭",
+   "symbols": [
+    "xmark",
+    "xmark.circle",
+    "xmark.square"
+   ]
+  }
+ }
+}
