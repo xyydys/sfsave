@@ -6,8 +6,10 @@ extension VectorDrawing {
     /// a clip becomes an intersection, the black-on-white "clear behind"
     /// masks the system uses for gaps between layers become a subtraction.
     /// The SVG then holds plain filled paths, which every SVG renderer draws
-    /// the same way. Masks with soft or partial values (gradients, half
-    /// transparency) cannot be expressed as geometry and are kept.
+    /// the same way. An alpha mask made of solid shapes at several opacities
+    /// (how the system draws hierarchical layers over a gradient) turns the
+    /// masked shape into one copy per mask shape at that opacity. Masks with
+    /// gradients or partial knockouts cannot be expressed as geometry and are kept.
     func flattened() -> VectorDrawing {
         var flattener = Flattener(drawing: self)
         var result = self
@@ -24,11 +26,20 @@ private enum GeometryOp {
     case subtract(CGPath)
 }
 
+private enum MaskGeometry {
+    /// Fully shown or fully hidden areas.
+    case ops([GeometryOp])
+    /// Areas shown at an opacity, drawn in order. Painting the masked shape
+    /// once per area at that opacity composites to the same result, as long
+    /// as the masked content is a single shape.
+    case layers([(path: CGPath, alpha: Double)])
+}
+
 private struct Flattener {
     let drawing: VectorDrawing
     var keptMasks = 0
     private var clipCache: [String: CGPath] = [:]
-    private var maskCache: [String: [GeometryOp]?] = [:]
+    private var maskCache: [String: MaskGeometry?] = [:]
 
     init(drawing: VectorDrawing) { self.drawing = drawing }
 
@@ -41,13 +52,27 @@ private struct Flattener {
             case .group(var group):
                 var inner = ops + clipOps(group.clipID)
                 group.clipID = nil
-                if let maskID = group.maskID, let maskOps = maskOps(maskID) {
-                    inner += maskOps
-                    group.maskID = nil
-                } else if group.maskID != nil {
-                    keptMasks += 1
+                var layers: [(path: CGPath, alpha: Double)]?
+                if let maskID = group.maskID {
+                    switch maskGeometry(maskID) {
+                    case .ops(let maskOps)?:
+                        inner += maskOps
+                        group.maskID = nil
+                    case .layers(let found)?:
+                        layers = found
+                    case nil:
+                        keptMasks += 1
+                    }
                 }
                 group.children = flatten(group.children, ops: inner)
+                if let layers {
+                    if group.children.count == 1, case .shape(var only) = group.children[0] {
+                        only.fillOpacity *= group.opacity
+                        result += Self.layered(only, layers).map { .shape($0) }
+                        continue
+                    }
+                    keptMasks += 1
+                }
                 result += simplify(group)
             }
         }
@@ -88,15 +113,20 @@ private struct Flattener {
         var shape = shape
         var all = ops + clipOps(shape.clipID)
         shape.clipID = nil
+        var layers: [(path: CGPath, alpha: Double)]?
         if let maskID = shape.maskID {
-            if let maskOps = maskOps(maskID) {
+            switch maskGeometry(maskID) {
+            case .ops(let maskOps)?:
                 all += maskOps
                 shape.maskID = nil
-            } else {
+            case .layers(let found)?:
+                layers = found
+                shape.maskID = nil
+            case nil:
                 keptMasks += 1
             }
         }
-        if all.isEmpty { return [shape] }
+        if all.isEmpty && layers == nil { return [shape] }
 
         var parts: [VectorShape] = []
         if shape.fill != nil {
@@ -117,12 +147,26 @@ private struct Flattener {
             outline.stroke = nil
             parts.append(outline)
         }
-        return parts.compactMap { part in
+        let clipped: [VectorShape] = parts.compactMap { part in
             var part = part
             guard let path = Self.apply(all, to: Self.normalized(part)) else { return nil }
             part.path = path
             part.evenOdd = true
             return part
+        }
+        guard let layers else { return clipped }
+        return clipped.flatMap { Self.layered($0, layers) }
+    }
+
+    /// One copy of `shape` per mask area, at that area's opacity.
+    private static func layered(_ shape: VectorShape, _ layers: [(path: CGPath, alpha: Double)]) -> [VectorShape] {
+        layers.compactMap { layer in
+            guard layer.alpha > 0.002, let path = apply([.intersect(layer.path)], to: normalized(shape)) else { return nil }
+            var piece = shape
+            piece.path = path
+            piece.evenOdd = true
+            piece.fillOpacity *= layer.alpha
+            return piece
         }
     }
 
@@ -182,32 +226,32 @@ private struct Flattener {
         return ops
     }
 
-    /// The mask as geometry, or `nil` when it has partial values.
-    private mutating func maskOps(_ id: String) -> [GeometryOp]? {
+    /// The mask as geometry, or `nil` when it cannot be expressed that way.
+    private mutating func maskGeometry(_ id: String) -> MaskGeometry? {
         if let cached = maskCache[id] { return cached }
-        let ops = computeMaskOps(id)
-        maskCache[id] = .some(ops)
-        return ops
+        let geometry = computeMaskGeometry(id)
+        maskCache[id] = .some(geometry)
+        return geometry
     }
 
-    private mutating func computeMaskOps(_ id: String) -> [GeometryOp]? {
-        guard let mask = drawing.masks[id] else { return [] }
+    private mutating func computeMaskGeometry(_ id: String) -> MaskGeometry? {
+        guard let mask = drawing.masks[id] else { return .ops([]) }
         var shapes: [VectorShape] = []
         guard collectPlain(mask.children, ops: [], into: &shapes) else { return nil }
         let union = shapes.reduce(CGMutablePath() as CGPath) { acc, shape in
             acc.isEmpty ? shape.path : acc.union(shape.path, using: .evenOdd)
         }
-        if mask.alpha {
-            // Visible where the mask content is opaque.
-            guard shapes.allSatisfy({ (Self.alpha(of: $0) ?? 0) > 0.98 }) else { return nil }
-            return [.intersect(union)]
-        }
+        let opaque = shapes.allSatisfy { (Self.alpha(of: $0) ?? 0) > 0.98 }
         let backdrop = mask.backdrop.map(Self.luminance) ?? 0
-        if backdrop > 0.98, shapes.allSatisfy({ (Self.alpha(of: $0) ?? 0) > 0.98 && (Self.lightness(of: $0) ?? 1) < 0.02 }) {
-            return shapes.isEmpty ? [] : [.subtract(union)]
+        // An alpha mask, or a luminosity mask of white shapes on black, shows
+        // the content as much as the shapes cover it.
+        if mask.alpha || (backdrop < 0.02 && shapes.allSatisfy({ (Self.lightness(of: $0) ?? 0) > 0.98 })) {
+            if opaque { return .ops([.intersect(union)]) }
+            return .layers(shapes.compactMap { shape in Self.alpha(of: shape).map { (path: shape.path, alpha: $0) } })
         }
-        if backdrop < 0.02, shapes.allSatisfy({ (Self.alpha(of: $0) ?? 0) > 0.98 && (Self.lightness(of: $0) ?? 0) > 0.98 }) {
-            return [.intersect(union)]
+        // Black shapes on white cut the content away.
+        if backdrop > 0.98, opaque, shapes.allSatisfy({ (Self.lightness(of: $0) ?? 1) < 0.02 }) {
+            return .ops(shapes.isEmpty ? [] : [.subtract(union)])
         }
         return nil
     }
