@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import QuickLookThumbnailing
 import SwiftUI
 import UIKit
 
@@ -73,7 +74,10 @@ enum SelfTest {
             Case(name: "building.2.fill", style: style(.hierarchical, [.system(.blue)]), plain: true),
             Case(name: "clock", style: style(.hierarchical, [.system(.orange)]), plain: true),
             Case(name: "captions.bubble.fill", style: style(.monochrome, [.system(.blue)]), plain: true),
-            Case(name: "person.2.fill", style: filled(style(.hierarchical, [.system(.blue)]), [fill("#7F5AF0", "#2CB5FF")]), plain: true)
+            Case(name: "person.2.fill", style: filled(style(.hierarchical, [.system(.blue)]), [fill("#7F5AF0", "#2CB5FF")]), plain: true),
+            // The "aurora" look on the compass, which looked soft in Files.
+            Case(name: "safari.fill", style: filled(style(.hierarchical, [.system(.blue)], weight: .medium), [fill("#7F5AF0", "#2CB5FF")]), plain: true),
+            Case(name: "safari", style: filled(style(.hierarchical, [.system(.blue)], weight: .medium), [fill("#7F5AF0", "#2CB5FF")]), plain: true)
         ]
     }
 
@@ -117,6 +121,10 @@ enum SelfTest {
             print("SVG-END")
             let reference = referencePNG(test.name, test.style)
             print("REFERENCE-PNG \(reference?.base64EncodedString() ?? "none")")
+            // How the system's file preview draws the file at a real icon size.
+            let small = SVGWriter.layout(for: drawing, frame: output.frame, width: 24, height: 24, padding: 0.1, fit: .contain)
+            let smallSVG = SVGWriter.svg(drawing, layout: small, title: test.name, background: nil)
+            print("QL-PNG \(await quickLookPNG(smallSVG, label: label, directory: directory)?.base64EncodedString() ?? "none")")
             if test.dumpPDF {
                 print("PDF-BEGIN")
                 print(contentDump(output.pdf))
@@ -126,6 +134,7 @@ enum SelfTest {
             try? output.pdf.write(to: directory.appendingPathComponent(label + ".pdf"))
             if let reference { try? reference.write(to: directory.appendingPathComponent(label + ".png")) }
         }
+        await quickLookControls(directory: directory)
         failures += await batchTest(directory: directory)
         failures += await fileTest(directory: directory)
         failures += await captureTest()
@@ -394,6 +403,42 @@ enum SelfTest {
 
     /// heart_filled, arrow_right_regular and AS_Email from a real capture, zipped with deflate.
     private static let captureZip = "UEsDBBQAAAAIAIoDW10t5yknkQMAAMYDAAAwAAAAV2VDaGF0SWNvbnNfdGVzdC9pY29ucy9oZWFydF9maWxsZWRfMjB4MjBAM3gucG5n6wzwc+flkuJiYGDg9fRwCQLSNiDMwQYkrf7cLAJSjMVB7k4M687JvARyKlIjPNN8fRm0gGwOBhZGKQZWkBIgtmOUhrPdGDUYmMFsJgaG9kwGFqi4HwME3IDyITTzAkaoaqDYAia4apsFzAg2SBtb8NV+IMVZ4BFZzMCgaAHCjK7TDBOAgjKZLv4hQJoJaoUcEGtAaSBmEhJXLTUBmnXP08UxJIP1TfhpL2ZDEdkjU/lLFjb9YlbqkBYsNO02Wmo1U0V+gXSh9g/2Rdni7/4w/mVjdTyyVy+2U39CUGbtlWMzFy5QvxpZsqFkVhrXUs2WM08Ki87tNJ95ZdOZ8xYJMgZ8Euw9zMcYHzcUHgByX6xg1p9nLhO0S86gTKagTtjom2RRnGul823RV87zL00tvv3O38un76ttfug51mNbjzit9MrZyXar78OesA1vFy6Zkdt/2vqcgti9w4feK3y+u6bhhe2xvDcRYfGLj6bKF5g1/r7A8359/Kxdv31OOCj76L5t2uiqUzJ9Qsidnu6u575HOzmuz21TnK41w+Cz2AzuQh/d93bP9Tw4RZMuysz4KiFgJCzIpTGX9eXyFfEbxeySd3IEe+tqxLLN1Hd1+joxTYd/YfHC1+eY1y9gFW4UaNHJFPx96saKNo0r3c/2dJjoZQpFH572e/+Ukz1bdKWW8JUIeYt2b/y7jWW6bDoTy9clRU3Csc2Si+ac7tXuPlZeEs3cWWG1/BffuehTTRvPn9vla/DtU+euB/dn+60S9Dx4YdGkhMpHSx2WKT/TjLXVvvkmZTvXtPbc04HvdnJ4twsk/sxfqpy5olB2q22M8J25y79knn4p4/ti5/uCt8uOzlhvePfSPblHzRM2aiT8v2oPjOz//3mTjEFJ5ioopt/eMORjUhRgvbC3Ue6YhPBtXdY0vrSHqnumb7zuFbMtUCcj9QIrm5GKsNCPs79LeJxTznao269XY3sg8fDI+vcM2e0VT/nKGKbftlj3SMnpUNbe7w/Uk7ds9XrLIVJ1ZP+mjw9mKt7y7WDfpaJ4UuCtWnIIk6LtKY658tKvEhv02lMb9PrXdqxrX9uwrl+341mzbsOz9rMdz7rPNjzrjxW4y1fGWFJ9w/7C26R6h+39vg7fm1UX/D5c5/i9mzeDe8PX//7Pz9tsuddSfHMpY6aD1AS2JYyZC/6z3Xt6mu/ht3dOvKA07unq57LOKaEJAFBLAwQUAAAACACKA1tdUmFatpcDAADaAwAAMAAAAFdlQ2hhdEljb25zX3Rlc3QvaWNvbnMvaGVhcnRfZmlsbGVkXzI0eDI0QDN4LnBuZ+sM8HPn5ZLiYmBg4PX0cAkC0h4gzMEGJEPfbnYHUozFQe5ODOvOybwEcipSIzzTfH0ZtIBsDgYWRikGVpASILZjlIaz3Rg1GJjBbCYGhvZMBhaouB8DBNyA8iE08wJGqGqg2AImuGqPBcwINkib7N4qGyDFWeARWczAoGgBwoyu0wwTgIIymS7+IUCaCWqFChBrQGkgZmI9vyzPDWjWRU8Xx5AKxjfTdnsxB4q4TtaIytBUPOLHulVkzZXzH7h1nGqUIzjMxMyiXAR5IjiVxJqaWlv5dVi8Lx4Kctlw1eug0TpmMUUDY893H/3Yzrfynpxz/N5moRmeS99IMConsPQ0CBowuR3gQHD+z3BYGvTSdXKGaO7i2C2NaRcsXhUcPdznZ9KYNvGNWL+uyrxHc8u/BsxVDzCPcuHXeFVzsaDjmBTvwR4GO6dNyq/uXN7QsEvqa+Dr4zbNT+Z/bJxlOZ2H15V1UbpErHnygTPWWot8pvRnyR6W2eW47vls1tYFBVeWTfyyY562WEpzTcj6ZJOGuBjh62fyw9qXTHNbOkvu+vrzOi9Wfwv83+Mot3eXGu8M/eLYAx3fmKpi9E/zzw5mV+aOvNP3LkbY7cz7YPuOF4W69zct8JUV8g6Pmbz1wp9NWgp5Ot2vKvdsE2i+oDE/pPqKwsYc2yt6M4+aijrc2b3n/R7VyY4ZWZU3lsxV3JhickXt5lFBXgfvk2kCs+rimC/E753covY9RCebweqziBnfbGFeB/FCle9PKtcxvrgSfMMip8+U4e2RiXcmp3syBxwECSwzYeA9BhLYb6wQ6XBD3b+x9pbNqgM/WU2eG+9UX59k21AHjN///zMcf1oBGd9Akfv2ui/XIQMB1gfv/jhXW5rfO9fKfTCaI2pP2wPdKT9YNhdOXZlpZFzZ6i4me2lPfvClUk5/jsROGwH987KuYpxXL7tveHium68q5/JsbrWNHw8yXooLiDTjmmNZZNhTcuxm+qZrhzJrFrjnsU1cZ/HZLaL8zg7HJUUWE68IBFXKOHt8LeBRuHo8sGcJu7viJDsZV4+qQhGFl8dXdqSwL2eaZDunyaOskEvh5vGZApkaZR97VJfFGd+7++ehyx8ej7pCI4Wfx38yr5SdI+jx9iHHhFtHPR2UzvFf4qzfKf7Jpe+E1b7nv0QZTr0SbgpoYBJZwMCq4cDIFeCw94B0cKZsU3U4XzEo3Xu6+rmsc0poAgBQSwMEFAAAAAgAigNbXTeKKq2+BAAAUAUAACwAAABXZUNoYXRJY29uc190ZXN0L2ljb25zL0FTX0VtYWlsXzMyeDMyQDN4LnBuZ+sM8HPn5ZLiYmBg4PX0cAkC0gkgzMEGJB/NKLcAUozFQe5ODOvOybwEcipSIzzTfH0ZtIBsDgYWRikGVpASILZjlIaz3Rg1GJjBbCYGhvZMBhaouB8DBNyA8iE08wJGqGqg2AImuOqEBcwINkibyv7kuUCKs8AjspiBQdEChBldpxmCJGUyXfxDgDQT1AoDINaA0kDMdDI2sSYASE/1dHEMqWB8M/Og32EDnrbvArn8B7wLnsRaFD9XvMXJWXifu+ChrMVHpd0FTq+3MMsoyq1OW7ik7K7K22P9JoKqxW/+F78pe5vUaC/AwEgAFbDoydutX5X2O+ba7O+L7tU8Fk5z6OkQNewuqshYvCnPnsGW5+7xthmunkypl58zFBc5ddx9oeVwe6JjO5/yRum5DReezbiuysY548cyRs4f/pw37uua3l6/Odff7/YF60M1og+aVs+667szZ333rtj58UK3TDOVe482OE/TZzz9Nvb5m0eF4SK+v6vMPAuiPIKXry+I2nrLSvpz/dLFU887bs2ZP+Xb5r+lvlI1t+asm+o2+3zZhTlPluTc2r6Pd3VVsfWSFNX6m9dWLt114/eWiWWa8+yqr856cuDr7+rMxZd36/35Vu0pnjn9h0d1x+tJzFH8UzXv/0lZx13/y/b6geO3vp3K9Un2Zfp2v1Nmx638I7//iLCfZJkrzcu8UPvuzVhxkb/zZkREaaZnSvF7N1TbTQo48yAi5OrEbxdmLChWXv1C5GlOr2rG9IW5RdOWFRpUnH15SuGCVPw65qSmc71rmPrLMr3/vHD/XmFR3v1Ex/fxQabaqYazXzv9O5wAlF+k8mDClJjU972Vi8pORM46Fme4L3jd3NkMR6Z0mjs+d7sovME/ZFmYQfO140DJTKEJj787LVPhnpoP1DpJ9YFAxaRvBo6zuQsfAQ2+cCzwuTKT96SAh1O+bzQAaq6dfTxW+qZR2oX3tTYW3pdvbM/cZGl8ZOJJ6cJDqmJqL+54FE1Iir3tdkd6pfivD9+32pTZLbMNPqL19mSyQa8q+8lrU6+zel65ot+05MeRrykNoanrs3UVBac9/77xa1vS62f1wDT6/3/sRj57YGJfAUqgb285Zh1iEGEJ4E/cdNG7Yn6cuqC5bZv6R53YqUdCd1/506TwYgKniBqzcsfD58ft/7NuOpVm/Plm2WHfX2/X7881rzlzpMYy9nrO8uylN9V3T0/w5n7FKvf59uMfJ9PW3zte+irezPhNsP4Hm/0vj3sXy/Br5MxdPe959pXjGtqx4fof8upux5//2vGTef6F1zuy3lddNZWSMl0lXjC/P+blLusGK3veXqmr3DvOu68ruSvrMHd+m1vvK9Y7z5XDd73jW3DO33mx21emd58naseWswc8X74wcHEV4/efJ6au28284vPlCysC9zb8rnnidf0u45WfmRlXVsQdqLUrWvr6HcOrPyYmWSH6D+zkd14qLWcoraPM2uTLvPGvVGOeT5cFmp5d+/jMw2VTZIFmlC+fX3u59z4f93rN5JlTZYtiQ9bbr9o98/jFP6t/pYaE/W/b/8JvqSWTYIcDi5JAI4eLAhamKdcdRlfuzJlX2vhXgEobT1c/l3VOCU0AUEsDBBQAAAAIAIoDW13eXvzjfQEAANIBAAA2AAAAV2VDaGF0SWNvbnNfdGVzdC9pY29ucy9hcnJvd19yaWdodF9yZWd1bGFyXzh4MTZAM3gucG5n6wzwc+flkuJiYGDg9fRwCQLSEkBswMEGJLk7di0GUozFQe5ODOvOybwEcipSIzzTfH0ZtIBsDgYWRikGVpASILZjlIaz3Rg1GJjBbCYGhvZMBhaouB8DBNyA8iE08wJGqGqg2AImuGqJBcxwtgFI2zwO3d1AirPAI7KYgUHRAoQZXacZJgAFZTJd/EOANBPUCpA3NKA0CPdknpp0HUhHeLo4hkRwJiVIsC5WNJBiWqzoUMfx5///+0wdb0+aM/b7rXjI6yDVsjKb84KDmkJfq5SfsXeEu+5B4aMrgg4skOLVu6Jw8Lj0t4Opzee/q5xO5FxntUBCfJcjyMr//zVEH10AMtJBdiQnKAgDzZ3P2rG4cQdj1+tGE/OZxxZmMUu15FmcELIOCU35VCDxzmVZ4YpbbrzuvPwa+SYRbCoRMxoe9s1xdpzZYfVS5pnsgsYwBx5tphXZFrNUtxjKpJ3UsAU5GejuCQIMDKXnHiwUa+XZArLc09XPZZ1TQhMAUEsDBBQAAAAIAIoDW136takozQEAABgCAAA2AAAAV2VDaGF0SWNvbnNfdGVzdC9pY29ucy9hcnJvd19yaWdodF9yZWd1bGFyXzE2eDhAM3gucG5n6wzwc+flkuJiYGDg9fRwCQLSBkAswcEGJPf8rbsDpBiLg9ydGNadk3kJ5FSkRnim+foyaAHZHAwsjFIMrCAlQGzHKA1nuzFqMDCD2UwMDO2ZDCxQcT8GCLgB5UNo5gWMUNVAsQVMcNUGC5jhbAmQtuVcJlJAirPAI7KYgUHRAoQZXacZJgAFZTJd/EOANBPUCh4g1oDSILzDI/vXeyDd4uniGBLBmZQgwbpY0UCKSaXdwdmZWfjkLI6MBa0zI9a+eT075M5t60rjC05ma7hOCLDMOnrxtnWmtcDziQvnVugqHP/+1fcf/8HJ2wIOCwsc97/HaDx92bwXb+feYNncITXPodzmhE/Cm2tC8ktSViyZps525KPB/6BXnYylNkvnSYj0qV8X3lJgA3TG//99CQFRQEYjyD3JCQsEvnzzy3n1evYf+Ub13MyMjARnczGNY0CrK9md7j7571Cnu2sX40PhT0cWlNnoHCmoTPKwkJuvzpa7qdFSau6xHk6XfxImmXJ3L76oyZknYdTXXsn2ojMrofPz8u3ll97Pm3cy1eCjouv3L186tmzdysmv6d5vVWbC0hbBwcBQLhDYdXrHqgJQqHm6+rmsc0poAgBQSwMEFAAAAAgAJhNbXXLTn39eAQAA+gQAAB4AAABXZUNoYXRJY29uc190ZXN0L21hbmlmZXN0Lmpzb26dkV1LwzAUhv/KiLejNunHileOoeCdMNALkRDb2AbSJKTp1jn2302iw8mysq0X4eSc95y8T88WGCk5uJuAV7poiHkqpVgQZXpNwXQCiFK2tgUrqjsmhdMVURzNErCz1YquWEm9oJUV9WPYcyMFhXCau/5u0xnavvx1wyya+d5S9sLYTGZjZh/tbPy2BYK0biBoKNEGfzLOaeUG2cjnvfT2sIpRPKD4PhkiJWonNRvlpd3KXzUVFdVL9vVjtLEnim2+F8y9D5RxqrVPO2OsJTU9X15KLrUr3DzOM5hB/9dE7d26vq4kPk6s+Dq8dEDpZXhp2G96Am9MfoDnv/Pw5kv80BLG957/4+2rOEFDggJoH8y0RJ2gS1DQboLCdKPyPZ3oOT8A+72G2YjWco01qxuDNa17TvQxYkCEiwHmF+0R5kHrRRh0TH3dFq8mhflQXERaBK3DPEw6pj53o++7b1BLAQIUAxQAAAAIAIoDW10t5yknkQMAAMYDAAAwAAAAAAAAAAAAAACkgQAAAABXZUNoYXRJY29uc190ZXN0L2ljb25zL2hlYXJ0X2ZpbGxlZF8yMHgyMEAzeC5wbmdQSwECFAMUAAAACACKA1tdUmFatpcDAADaAwAAMAAAAAAAAAAAAAAApIHfAwAAV2VDaGF0SWNvbnNfdGVzdC9pY29ucy9oZWFydF9maWxsZWRfMjR4MjRAM3gucG5nUEsBAhQDFAAAAAgAigNbXTeKKq2+BAAAUAUAACwAAAAAAAAAAAAAAKSBxAcAAFdlQ2hhdEljb25zX3Rlc3QvaWNvbnMvQVNfRW1haWxfMzJ4MzJAM3gucG5nUEsBAhQDFAAAAAgAigNbXd5e/ON9AQAA0gEAADYAAAAAAAAAAAAAAKSBzAwAAFdlQ2hhdEljb25zX3Rlc3QvaWNvbnMvYXJyb3dfcmlnaHRfcmVndWxhcl84eDE2QDN4LnBuZ1BLAQIUAxQAAAAIAIoDW136takozQEAABgCAAA2AAAAAAAAAAAAAACkgZ0OAABXZUNoYXRJY29uc190ZXN0L2ljb25zL2Fycm93X3JpZ2h0X3JlZ3VsYXJfMTZ4OEAzeC5wbmdQSwECFAMUAAAACAAmE1tdctOff14BAAD6BAAAHgAAAAAAAAAAAAAAgAG+EAAAV2VDaGF0SWNvbnNfdGVzdC9tYW5pZmVzdC5qc29uUEsFBgAAAAAGAAYAKgIAAFgSAAAAAA=="
+
+    /// One plain shape written several ways, each run through the file preview,
+    /// to see which SVG features it draws at low resolution.
+    private static func quickLookControls(directory: URL) async {
+        let ring = "M12 2C17.523 2 22 6.477 22 12C22 17.523 17.523 22 12 22C6.477 22 2 17.523 2 12C2 6.477 6.477 2 12 2ZM12 7C9.239 7 7 9.239 7 12C7 14.761 9.239 17 12 17C14.761 17 17 14.761 17 12C17 9.239 14.761 7 12 7Z"
+        let gradient = "<defs><linearGradient id=\"g\" gradientUnits=\"userSpaceOnUse\" x1=\"2\" y1=\"2\" x2=\"22\" y2=\"22\"><stop offset=\"0\" stop-color=\"#7F5AF0\"/><stop offset=\"1\" stop-color=\"#2CB5FF\"/></linearGradient></defs>"
+        let fadedGradient = "<defs><linearGradient id=\"g\" gradientUnits=\"userSpaceOnUse\" x1=\"2\" y1=\"2\" x2=\"22\" y2=\"22\"><stop offset=\"0\" stop-color=\"#7F5AF0\" stop-opacity=\"0.5\"/><stop offset=\"1\" stop-color=\"#2CB5FF\" stop-opacity=\"0.5\"/></linearGradient></defs>"
+        let variants: [(String, String, String)] = [
+            ("solid", "", "<path d=\"\(ring)\" fill=\"#3478F6\" fill-rule=\"evenodd\"/>"),
+            ("solid-opacity", "", "<path d=\"\(ring)\" fill=\"#3478F6\" fill-opacity=\"0.5\" fill-rule=\"evenodd\"/>"),
+            ("solid-attr-opacity", "", "<path d=\"\(ring)\" fill=\"#3478F6\" opacity=\"0.5\" fill-rule=\"evenodd\"/>"),
+            ("group-opacity", "", "<g opacity=\"0.5\"><path d=\"\(ring)\" fill=\"#3478F6\" fill-rule=\"evenodd\"/></g>"),
+            ("gradient", gradient, "<path d=\"\(ring)\" fill=\"url(#g)\" fill-rule=\"evenodd\"/>"),
+            ("gradient-fill-opacity", gradient, "<path d=\"\(ring)\" fill=\"url(#g)\" fill-opacity=\"0.5\" fill-rule=\"evenodd\"/>"),
+            ("gradient-stop-opacity", fadedGradient, "<path d=\"\(ring)\" fill=\"url(#g)\" fill-rule=\"evenodd\"/>")
+        ]
+        for (name, defs, body) in variants {
+            print("=== QL control \(name)")
+            let svg = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\">\(defs)\(body)</svg>\n"
+            print("QL-PNG \(await quickLookPNG(svg, label: "control-" + name, directory: directory)?.base64EncodedString() ?? "none")")
+        }
+    }
+
+    /// A file-preview thumbnail of `svg`, as the Files app makes it.
+    private static func quickLookPNG(_ svg: String, label: String, directory: URL) async -> Data? {
+        let url = directory.appendingPathComponent("ql-\(label).svg")
+        do { try Data(svg.utf8).write(to: url) } catch { return nil }
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: 128, height: 128), scale: 3,
+                                                   representationTypes: .thumbnail)
+        do {
+            return try await QLThumbnailGenerator.shared.generateBestRepresentation(for: request).uiImage.pngData()
+        } catch {
+            print("QL-ERROR \(label): \(error.localizedDescription)")
+            return nil
+        }
+    }
 
     /// The system's own bitmap rendering, for comparison with the SVG.
     private static func referencePNG(_ name: String, _ style: SymbolStyle) -> Data? {
