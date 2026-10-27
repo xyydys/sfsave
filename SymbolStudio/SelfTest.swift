@@ -15,6 +15,8 @@ enum SelfTest {
         var style = SymbolStyle()
         var canvas = 128
         var dumpPDF = false
+        /// The SVG must come out as plain paths: no mask, no clip-path.
+        var plain = false
     }
 
     private static var cases: [Case] {
@@ -62,7 +64,16 @@ enum SelfTest {
             Case(name: "bell.badge.fill", style: filled(style(.palette, [.system(.red), .system(.blue)]),
                                                         [fill("#FF3CAC", "#784BA0"), fill("#00DBDE", "#2B86C5")])),
             Case(name: "camera.fill", style: badged(style(.monochrome, [.system(.white)]), .squircle, fill("#6A5CFF", "#C04CFD")), dumpPDF: true),
-            Case(name: "magnifyingglass", style: badged(style(.hierarchical, [.system(.white)]), .circle, fill("#FF7A45", "#FF3D71")))
+            Case(name: "magnifyingglass", style: badged(style(.hierarchical, [.system(.white)]), .circle, fill("#FF7A45", "#FF3D71"))),
+            // Symbols whose gaps between layers came out as masks.
+            Case(name: "document.on.document.fill", style: style(.monochrome, [.system(.blue)]), plain: true),
+            Case(name: "square.fill.on.square.fill", style: style(.hierarchical, [.system(.blue)]), plain: true),
+            Case(name: "square.and.pencil", style: style(.monochrome, [.system(.blue)]), plain: true),
+            Case(name: "bell.slash", style: style(.monochrome, [.system(.red)]), plain: true),
+            Case(name: "building.2.fill", style: style(.hierarchical, [.system(.blue)]), plain: true),
+            Case(name: "clock", style: style(.hierarchical, [.system(.orange)]), plain: true),
+            Case(name: "captions.bubble.fill", style: style(.monochrome, [.system(.blue)]), plain: true),
+            Case(name: "person.2.fill", style: filled(style(.hierarchical, [.system(.blue)]), [fill("#7F5AF0", "#2CB5FF")]), plain: true)
         ]
     }
 
@@ -97,6 +108,10 @@ enum SelfTest {
             print("RESULT ok shapes=\(drawing.shapeCount) gradients=\(drawing.gradients.count) masks=\(drawing.masks.count) clips=\(drawing.clips.count) raster=\(drawing.rasterImages) text=\(drawing.textRuns) page=\(drawing.pageSize) bounds=\(drawing.bounds) frame=\(output.frame)")
             for warning in drawing.warnings { print("WARNING \(warning)") }
             if drawing.isIncomplete { failures += 1 }
+            let masks = output.svg.components(separatedBy: "<mask").count - 1
+            let clips = output.svg.components(separatedBy: "clip-path=").count - 1
+            print("FLAT masks=\(masks) clips=\(clips)\(test.plain && masks + clips > 0 ? " FAILED" : "")")
+            if test.plain && masks + clips > 0 { failures += 1 }
             print("SVG-BEGIN")
             print(output.svg, terminator: "")
             print("SVG-END")

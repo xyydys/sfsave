@@ -1,4 +1,4 @@
-# 符号工坊 SymbolStudio 0.4.3
+# 符号工坊 SymbolStudio 0.4.4
 
 iPhone / iPad 原生 SwiftUI 应用：查找 SF Symbols，按系统的渲染方式配色，导出 **SVG / PNG**，并复制 **SwiftUI / UIKit / Objective-C** 代码。
 
@@ -92,7 +92,8 @@ python3 Scripts/check_plan.py my-plan.json
 ## SVG 内容
 
 - `<path>` 带十六进制颜色和 `fill-opacity`；路径坐标已换算到画布，无需额外变换
-- 渐变写成 `<linearGradient>` / `<radialGradient>`，裁剪写成 `<clipPath>`，系统用到的软蒙版写成 `<mask>`
+- 渐变写成 `<linearGradient>` / `<radialGradient>`
+- 系统画层与层之间的缝隙时用的裁剪和黑白遮罩，会用路径布尔运算直接算进形状（求交、相减），导出的只是普通填色路径，“文件”预览、微信等简单的 SVG 渲染器也能画对；只有带渐变或半透明的遮罩没法变成路径，才保留为 `<mask>`，并在预览下方提示
 - 系统绘制里如果出现位图或文字（正常不会），预览下方会给出警告
 
 ## 编译与安装

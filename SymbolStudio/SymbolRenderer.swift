@@ -95,9 +95,10 @@ struct RenderOutput {
 @MainActor
 enum SymbolPipeline {
     /// The symbol drawn into a PDF and read back as vectors, before any layout.
+    /// Clips and knockout masks are already merged into the paths (see `flattened()`).
     static func renderDrawing(name: String, style: SymbolStyle) -> (pdf: Data, frame: CGRect, drawing: VectorDrawing)? {
         guard let capture = capturePDF(name: name, style: style),
-              let drawing = PDFVectorExtractor.extract(pdf: capture.pdf), !drawing.isEmpty else { return nil }
+              let drawing = PDFVectorExtractor.extract(pdf: capture.pdf)?.flattened(), !drawing.isEmpty else { return nil }
         return (capture.pdf, capture.frame, drawing)
     }
 
