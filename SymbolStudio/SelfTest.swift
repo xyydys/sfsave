@@ -95,6 +95,7 @@ enum SelfTest {
             if let reference { try? reference.write(to: directory.appendingPathComponent(label + ".png")) }
         }
         failures += await batchTest(directory: directory)
+        failures += await fileTest(directory: directory)
         print("SELFTEST-DONE failures=\(failures)")
         fflush(stdout)
         exit(0)
@@ -165,6 +166,52 @@ enum SelfTest {
             } catch {
                 print("BATCH-DECODE-ERROR \(error.localizedDescription)")
             }
+        }
+        return failures
+    }
+
+    /// Opens and closes both document pickers, then reads a plan back from a
+    /// file the way a picked or opened file is read.
+    private static func fileTest(directory: URL) async -> Int {
+        var failures = 0
+        print("=== FILES document pickers")
+        let saved = directory.appendingPathComponent("picker-test.txt")
+        try? Data("picker".utf8).write(to: saved)
+        for kind in ["open", "save"] {
+            let shown = kind == "open"
+                ? DocumentPicker.open(PlanFile.types) { _ in }
+                : DocumentPicker.save(saved) { }
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let top = DocumentPicker.topController()
+            let ok = shown && top is UIDocumentPickerViewController
+            print("FILES-PICKER \(kind) shown=\(shown) top=\(top.map { String(describing: type(of: $0)) } ?? "none") \(ok ? "ok" : "FAILED")")
+            if !ok { failures += 1 }
+            if top is UIDocumentPickerViewController { top?.dismiss(animated: false) }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        print("=== FILES plan from file")
+        let text = """
+        { "version": 1, "name": "named", "_comment": "notes", "_unmatched": [ { "placeholder": "W003" } ], "_skipped": [],
+          "output": { "darkSuffix": "_dark", "scaleSuffix": "@{n}x", "svgFolder": "svg" },
+          "icons": [
+            { "file": "arrow_left_regular", "symbol": "chevron.left", "mode": "monochrome", "colors": ["#000000"],
+              "appearances": ["light"], "formats": ["svg", "png"], "scales": [3], "_resource": "svg_tinted_by_wechat",
+              "_wgp": { "placeholder": "W001", "designs_merged": ["W001"] } },
+            { "file": "weapp_corner_icon_light", "symbol": "link.circle.fill", "mode": "palette",
+              "light": ["#FFFFFF", "#6467F0"], "dark": ["#FFFFFF", "#7D80F5"], "scales": [3] }
+          ] }
+        """
+        do {
+            let url = directory.appendingPathComponent("opened-plan.json")
+            try Data(text.utf8).write(to: url)
+            let plan = try IconPlan.decode(PlanFile.read(url)).resolve()
+            print("FILES-PLAN icons=\(plan.icons.count) errors=\(plan.errorCount) warnings=\(plan.warningCount)")
+            for issue in plan.issues { print("FILES-ISSUE \(issue.severity) \(issue.icon ?? "-"): \(issue.message)") }
+            if plan.icons.count != 2 || plan.errorCount + plan.warningCount > 0 { failures += 1 }
+        } catch {
+            print("FILES-ERROR \(error.localizedDescription)")
+            failures += 1
         }
         return failures
     }

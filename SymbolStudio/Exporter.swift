@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 
 enum ExportFile {
     /// Writes into a fresh temporary folder so the shared file keeps a clean name.
@@ -25,16 +24,4 @@ struct ShareSheet: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: [file], applicationActivities: nil)
     }
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) { }
-}
-
-struct SVGDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.svg] }
-    var text: String
-    init(text: String) { self.text = text }
-    init(configuration: ReadConfiguration) throws {
-        text = String(data: configuration.file.regularFileContents ?? Data(), encoding: .utf8) ?? ""
-    }
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: Data(text.utf8))
-    }
 }

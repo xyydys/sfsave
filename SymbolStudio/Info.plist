@@ -19,6 +19,15 @@
     <array><string>UIInterfaceOrientationPortrait</string></array>
     <key>UISupportedInterfaceOrientations~ipad</key>
     <array><string>UIInterfaceOrientationPortrait</string><string>UIInterfaceOrientationPortraitUpsideDown</string><string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string></array>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key><string>图标方案 JSON</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key><array><string>public.json</string><string>public.plain-text</string></array>
+        </dict>
+    </array>
     <key>UIFileSharingEnabled</key><true/>
     <key>LSSupportsOpeningDocumentsInPlace</key><true/>
     <key>NSPhotoLibraryAddUsageDescription</key><string>在你选择保存图片时，将导出的 PNG 存入相册。</string>

@@ -24,8 +24,6 @@ struct EditorView: View {
     @State private var previewBackground = PreviewBackground.checker
     @State private var errorMessage: String?
     @State private var shareFile: ShareFile?
-    @State private var exportingSVG = false
-    @State private var svgDocument = SVGDocument(text: "")
     @State private var savingDesign = false
     @State private var designTitle = ""
     @State private var toast: String?
@@ -72,13 +70,6 @@ struct EditorView: View {
         .task(id: RenderKey(name: item.name, style: style, options: options)) { await rerender() }
         .onAppear { store.recordRecent(item.name) }
         .sheet(item: $shareFile) { ShareSheet(file: $0.url) }
-        .fileExporter(isPresented: $exportingSVG, document: svgDocument,
-                      contentType: .svg, defaultFilename: item.name) { result in
-            switch result {
-            case .success: showToast("已保存 SVG")
-            case .failure(let error): errorMessage = error.localizedDescription
-            }
-        }
         .alert("保存配色", isPresented: $savingDesign) {
             TextField("配色名称", text: $designTitle)
             Button("保存") { saveDesign() }
@@ -247,11 +238,7 @@ struct EditorView: View {
 
     private var exportSection: some View {
         Section {
-            Button {
-                guard let output else { return }
-                svgDocument = SVGDocument(text: output.svg)
-                exportingSVG = true
-            } label: { Label("保存 SVG 到“文件”", systemImage: "square.and.arrow.down") }
+            Button { saveSVG() } label: { Label("保存 SVG 到“文件”", systemImage: "square.and.arrow.down") }
                 .disabled(output == nil)
             Button { share("svg") } label: { Label("分享 SVG", systemImage: "square.and.arrow.up") }
                 .disabled(output == nil)
@@ -311,6 +298,14 @@ struct EditorView: View {
         if Task.isCancelled { return }
         output = result
         renderFailed = result == nil
+    }
+
+    private func saveSVG() {
+        guard let output else { return }
+        do {
+            let url = try ExportFile.write(Data(output.svg.utf8), name: item.name, fileExtension: "svg")
+            if !DocumentPicker.save(url, saved: { showToast("已保存 SVG") }) { shareFile = ShareFile(url: url) }
+        } catch { errorMessage = error.localizedDescription }
     }
 
     private func share(_ kind: String) {

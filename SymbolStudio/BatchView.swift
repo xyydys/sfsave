@@ -1,32 +1,19 @@
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
-
-struct ZipDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.zip] }
-    var url: URL?
-    init(url: URL?) { self.url = url }
-    init(configuration: ReadConfiguration) throws { url = nil }
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        guard let url else { throw CocoaError(.fileNoSuchFile) }
-        return try FileWrapper(url: url, options: .immediate)
-    }
-}
 
 @MainActor
 struct BatchView: View {
+    /// A plan handed to the app with "Open in" from Files or another app.
+    @Binding var openedFile: URL?
     @State private var plan: ResolvedPlan?
     @State private var source: String?
     @State private var loadError: String?
     @State private var options = BatchOptions()
-    @State private var importing = false
     @State private var running = false
     @State private var done = 0
     @State private var total = 0
     @State private var summary: BatchSummary?
     @State private var shareFile: ShareFile?
-    @State private var savingZip = false
-    @State private var zipDocument = ZipDocument(url: nil)
     @State private var errorMessage: String?
     @State private var toast: String?
 
@@ -42,18 +29,10 @@ struct BatchView: View {
                 }
             }
             .navigationTitle("批量导出")
-            .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .plainText, .data]) { result in
-                switch result {
-                case .success(let url): loadFile(url)
-                case .failure(let error): errorMessage = error.localizedDescription
-                }
-            }
-            .fileExporter(isPresented: $savingZip, document: zipDocument, contentType: .zip,
-                          defaultFilename: summary?.url.deletingPathExtension().lastPathComponent ?? "icons") { result in
-                switch result {
-                case .success: showToast("已保存压缩包")
-                case .failure(let error): errorMessage = error.localizedDescription
-                }
+            .task(id: openedFile) {
+                guard let url = openedFile else { return }
+                openedFile = nil
+                loadFile(url)
             }
             .sheet(item: $shareFile) { ShareSheet(file: $0.url) }
             .alert("操作未完成", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -82,7 +61,8 @@ struct BatchView: View {
                 if let source { LabeledContent("来源", value: source) }
                 LabeledContent("图标", value: "\(plan.icons.count) 个可导出")
             }
-            Button { importing = true } label: { Label(plan == nil ? "导入方案 JSON…" : "换一个方案…", systemImage: "doc.badge.plus") }
+            Button { pickPlan() } label: { Label(plan == nil ? "导入方案 JSON…" : "换一个方案…", systemImage: "doc.badge.plus") }
+            Button { pastePlan() } label: { Label("从剪贴板导入", systemImage: "doc.on.clipboard") }
             Button { loadSample() } label: { Label("载入示例方案", systemImage: "wand.and.stars") }
             Button { copySample() } label: { Label("复制示例 JSON", systemImage: "doc.on.doc") }
             if plan != nil {
@@ -91,7 +71,7 @@ struct BatchView: View {
         } header: {
             Text("图标方案")
         } footer: {
-            Text("方案是一份 JSON：每个图标写明输出文件名、用哪个 SF Symbol、渲染模式、浅色和深色配色、尺寸和 @2x / @3x。先“载入示例方案”看看格式，再复制示例改成自己的。")
+            Text("方案是一份 JSON：每个图标写明输出文件名、用哪个 SF Symbol、渲染模式、浅色和深色配色、尺寸和 @2x / @3x。先“载入示例方案”看看格式，再复制示例改成自己的。\n也可以在“文件”或聊天 App 里点 JSON 文件，选“用其他应用打开”→ 符号工坊；或者复制 JSON 全文后点“从剪贴板导入”。")
         }
     }
 
@@ -141,10 +121,7 @@ struct BatchView: View {
                         }
                     }
                 }
-                Button {
-                    zipDocument = ZipDocument(url: summary.url)
-                    savingZip = true
-                } label: { Label("保存 zip 到“文件”", systemImage: "folder") }
+                Button { saveZip(summary.url) } label: { Label("保存 zip 到“文件”", systemImage: "folder") }
                 Button { shareFile = ShareFile(url: summary.url) } label: { Label("分享 zip", systemImage: "square.and.arrow.up") }
             }
         } header: {
@@ -166,11 +143,28 @@ struct BatchView: View {
 
     // MARK: Actions
 
+    private func pickPlan() {
+        if !DocumentPicker.open(PlanFile.types, picked: { loadFile($0) }) {
+            errorMessage = "打不开文件选择器。可以复制 JSON 全文后点“从剪贴板导入”。"
+        }
+    }
+
     private func loadFile(_ url: URL) {
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do { try load(Data(contentsOf: url), source: url.lastPathComponent) }
+        do { try load(PlanFile.read(url), source: url.lastPathComponent) }
         catch { fail(error) }
+    }
+
+    private func pastePlan() {
+        guard let text = UIPasteboard.general.string, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            errorMessage = "剪贴板里没有文字。先在别的 App 里全选并复制方案 JSON，再回来点这里。"
+            return
+        }
+        do { try load(Data(text.utf8), source: "剪贴板") }
+        catch { fail(error) }
+    }
+
+    private func saveZip(_ url: URL) {
+        if !DocumentPicker.save(url, saved: { showToast("已保存压缩包") }) { shareFile = ShareFile(url: url) }
     }
 
     private func loadSample() {
