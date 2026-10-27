@@ -33,7 +33,7 @@ struct CaptureView: View {
                     Menu {
                         Button { pickZip() } label: { Label("导入抓图 zip…", systemImage: "square.and.arrow.down") }
                         if capture.project != nil {
-                            Button { sheet = .bulk } label: { Label("一键套用风格…", systemImage: "wand.and.stars") }
+                            Button { sheet = .global } label: { Label("全局风格…", systemImage: "paintbrush") }
                             Button { sheet = .export } label: { Label("导出替换图标…", systemImage: "shippingbox") }
                             Button(role: .destructive) { confirmRemove = true } label: { Label("删除项目", systemImage: "trash") }
                         }
@@ -47,7 +47,7 @@ struct CaptureView: View {
         }
         .sheet(item: $sheet) { sheet in
             switch sheet {
-            case .bulk: BulkApplySheet { count in showToast("已套用到 \(count) 个图标") }
+            case .global: GlobalStyleSheet { message in showToast(message) }
             case .export: CaptureExportSheet()
             case .backups: BackupSheet { count in showToast("已恢复 \(count) 个图标的设置") }
             }
@@ -93,7 +93,7 @@ struct CaptureView: View {
                 .foregroundStyle(LinearGradient(colors: [Color(red: 0.5, green: 0.35, blue: 0.94), Color(red: 0.17, green: 0.71, blue: 1)],
                                                 startPoint: .topLeading, endPoint: .bottomTrailing))
             Text("导入抓到的微信图标").font(.title3.weight(.semibold))
-            Text("选抓图工具导出的 zip（里面有 manifest.json 和 icons 文件夹）。导入后每个素材都会列出来，可以一个一个选替换的符号和配色，也可以先一键套用一种风格再细调。")
+            Text("选抓图工具或替换插件导出的 zip（里面有 manifest.json）。导入后每个素材都会列出来：先在“全局风格”里定好整套的粗细、模式和配色，再一个一个挑符号；个别想单独处理的再单独调。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -178,8 +178,10 @@ struct CaptureView: View {
             defer { busy = false }
             do {
                 let result = try await capture.importCapture(data, merge: merge)
-                var text = "新增 \(result.added) 个素材"
-                if result.updated > 0 { text += "，已有的 \(result.updated) 个只补了尺寸和颜色" }
+                var text = (result.fromTemplate ? "从插件模板导入：新增 " : "新增 ") + "\(result.added) 个素材"
+                if result.updated > 0 {
+                    text += result.fromTemplate ? "，已有的 \(result.updated) 个补上了插件需要的格式和尺寸" : "，已有的 \(result.updated) 个只补了尺寸和颜色"
+                }
                 if result.changedKept > 0 { text += "，\(result.changedKept) 个已替换的在新版里原图有变化（没改，可筛选查看）" }
                 if !result.skipped.isEmpty { text += "，\(result.skipped.count) 个没读出来" }
                 showToast(text)
@@ -198,7 +200,7 @@ struct CaptureView: View {
 }
 
 enum CaptureSheet: String, Identifiable {
-    case bulk, export, backups
+    case global, export, backups
     var id: String { rawValue }
 }
 
@@ -229,7 +231,9 @@ private struct CaptureSummary: View {
             }
         }
         .padding(.vertical, 4)
-        Button { sheet = .bulk } label: { Label("一键套用风格…", systemImage: "wand.and.stars") }
+        Button { sheet = .global } label: {
+            Label("全局风格…（跟随 \(capture.styleCounts.global) 个，单独设置 \(capture.styleCounts.own) 个）", systemImage: "paintbrush")
+        }
         Button { sheet = .export } label: { Label("导出替换图标…", systemImage: "shippingbox") }
             .disabled((counts[.replaced] ?? 0) == 0)
     }
@@ -256,7 +260,8 @@ struct CaptureRow: View {
         HStack(spacing: 10) {
             OriginalThumb(icon: icon, side: 40)
             Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.tertiary)
-            ReplacementThumb(choice: capture.choices[icon.name], side: 40)
+            ReplacementThumb(choice: capture.choices[icon.name],
+                             look: capture.choices[icon.name].map { capture.effectiveLook(for: icon, choice: $0) }, side: 40)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(icon.name).font(.subheadline.weight(.medium)).lineLimit(1)
@@ -316,6 +321,8 @@ struct OriginalThumb: View {
 
 struct ReplacementThumb: View {
     let choice: IconChoice?
+    /// The look to draw with when it is not the choice's own (global style).
+    var look: IconLook? = nil
     var side: CGFloat
     var dark = false
 
@@ -325,7 +332,7 @@ struct ReplacementThumb: View {
                 .fill(dark ? Color(white: 0.12) : Color(white: 0.985))
                 .overlay(RoundedRectangle(cornerRadius: side * 0.22, style: .continuous).stroke(.gray.opacity(0.2), lineWidth: 1))
             if let choice, choice.replace {
-                LookSymbol(symbol: choice.symbol, look: choice.look, side: side)
+                LookSymbol(symbol: choice.symbol, look: look ?? choice.look, side: side)
             } else if choice != nil {
                 Text("原图").font(.system(size: side * 0.26)).foregroundStyle(.secondary)
             } else {
@@ -364,11 +371,13 @@ struct CaptureDetailView: View {
 
     private enum DetailSheet: Identifiable {
         case picker
+        case global
         case zoom(String)
 
         var id: String {
             switch self {
             case .picker: return "picker"
+            case .global: return "global"
             case .zoom: return "zoom"
             }
         }
@@ -408,6 +417,7 @@ struct CaptureDetailView: View {
 
     private func detail(_ icon: CaptureIcon) -> some View {
         let choice = capture.choice(for: icon)
+        let look = capture.effectiveLook(for: icon, choice: choice)
         let saved = capture.choices[icon.name]
         return List {
             if let update = icon.update { updateSection(icon, update) }
@@ -426,23 +436,31 @@ struct CaptureDetailView: View {
                 .pickerStyle(.segmented)
             }
             Section {
-                symbolStrip(icon, choice: choice)
+                symbolStrip(icon, choice: choice, look: look)
             } header: {
                 Text("符号")
             } footer: {
                 Text("前几个是按这个素材的用途挑的。点放大镜按分类找，也可以直接搜索（中英文都行）。")
             }
             Section {
+                Toggle("跟随全局风格", isOn: followBinding(icon))
+                Button { detailSheet = .global } label: { Label("编辑全局风格…", systemImage: "paintbrush") }
+            } footer: {
+                Text(choice.usesGlobal
+                     ? "这个图标用全局风格画，全局风格一改它就跟着变。点下面的风格或改“单独设置”，它就只用自己的风格。"
+                     : "这个图标单独设置了风格，改全局风格不会影响它。打开开关可以改回跟随全局。")
+            }
+            Section {
                 presetGrid(icon, choice: choice)
             } header: {
-                Text("风格")
+                Text("单独设置：风格")
             }
             Section {
                 LookEditor(look: lookBinding(icon))
             } header: {
-                Text("自定义")
+                Text("单独设置：自定义")
             } footer: {
-                Text("改了这里就不再算作某个预设。渐变：点“加渐变”后选结束色，角度对所有层生效。")
+                Text("在这里改动只影响这一个图标。渐变：点“加渐变”后选结束色，角度对所有层生效。")
             }
             Section {
                 info(icon)
@@ -452,11 +470,14 @@ struct CaptureDetailView: View {
         }
         .sheet(item: $detailSheet) { sheet in
             switch sheet {
-            case .picker: SymbolPickerSheet(look: choice.look) { symbol in update(icon) { $0.symbol = symbol } }
+            case .picker: SymbolPickerSheet(look: look) { symbol in update(icon) { $0.symbol = symbol } }
+            case .global: GlobalStyleSheet()
             case .zoom(let svg): SVGZoomSheet(svg: svg, title: icon.name, dark: darkTiles ?? icon.prefersDarkTile)
             }
         }
-        .task(id: RenderKey(name: icon.name, choice: saved)) { render(icon, choice: saved) }
+        .task(id: RenderKey(name: icon.name, choice: saved, look: saved.map { capture.effectiveLook(for: icon, choice: $0) })) {
+            render(icon, choice: saved)
+        }
     }
 
     // MARK: Sections
@@ -552,7 +573,7 @@ struct CaptureDetailView: View {
         .accessibilityLabel("实际大小对比")
     }
 
-    private func symbolStrip(_ icon: CaptureIcon, choice: IconChoice) -> some View {
+    private func symbolStrip(_ icon: CaptureIcon, choice: IconChoice, look: IconLook) -> some View {
         var candidates = capture.symbols(for: icon)
         if !candidates.contains(choice.symbol), UIImage(systemName: choice.symbol) != nil { candidates.insert(choice.symbol, at: 0) }
         let selected = capture.choices[icon.name]?.replace == true ? choice.symbol : nil
@@ -561,7 +582,7 @@ struct CaptureDetailView: View {
                 ForEach(candidates, id: \.self) { symbol in
                     Button { update(icon) { $0.symbol = symbol } } label: {
                         OptionTile(selected: symbol == selected, caption: symbol) {
-                            LookSymbol(symbol: symbol, look: choice.look, side: 56)
+                            LookSymbol(symbol: symbol, look: look, side: 56)
                         }
                     }
                     .buttonStyle(.plain)
@@ -578,11 +599,11 @@ struct CaptureDetailView: View {
     }
 
     private func presetGrid(_ icon: CaptureIcon, choice: IconChoice) -> some View {
-        let selected = capture.choices[icon.name]?.replace == true ? choice.presetID : nil
+        let selected = capture.choices[icon.name]?.replace == true && !choice.usesGlobal ? choice.presetID : nil
         return LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: 10)], spacing: 12) {
             ForEach(LookPreset.all) { preset in
                 Button {
-                    update(icon) { $0.look = preset.look(for: icon); $0.presetID = preset.id }
+                    update(icon, ownStyle: true) { $0.look = preset.look(for: icon); $0.presetID = preset.id }
                 } label: {
                     OptionTile(selected: preset.id == selected, caption: preset.title) {
                         LookSymbol(symbol: choice.symbol, look: preset.look(for: icon), side: 56)
@@ -598,6 +619,10 @@ struct CaptureDetailView: View {
     private func info(_ icon: CaptureIcon) -> some View {
         if let title = capture.title(for: icon) { LabeledContent("用途", value: title) }
         LabeledContent("类型", value: icon.kind.title)
+        if let plugin = icon.plugin {
+            LabeledContent("插件模板", value: plugin.formats.joined(separator: " + ") + (plugin.hasDark ? "（含深色）" : ""))
+            if let inApp = plugin.inApp { LabeledContent("App 内文件", value: inApp) }
+        }
         LabeledContent("尺寸（点）", value: icon.sizeText)
         if !icon.colors.isEmpty {
             LabeledContent("微信画的颜色") {
@@ -645,19 +670,39 @@ struct CaptureDetailView: View {
         })
     }
 
+    /// Editing starts from what the icon looks like now, global style included.
     private func lookBinding(_ icon: CaptureIcon) -> Binding<IconLook> {
-        Binding(get: { capture.choice(for: icon).look }, set: { look in
-            update(icon) { $0.look = look; $0.presetID = nil }
+        Binding(get: {
+            let choice = capture.choice(for: icon)
+            return capture.effectiveLook(for: icon, choice: choice)
+        }, set: { look in
+            update(icon, ownStyle: true) { $0.look = look; $0.presetID = nil }
         })
     }
 
-    /// Changes the icon's choice and marks it as replaced by hand, which
-    /// keeps bulk apply away from it.
-    private func update(_ icon: CaptureIcon, _ change: (inout IconChoice) -> Void) {
+    private func followBinding(_ icon: CaptureIcon) -> Binding<Bool> {
+        Binding(get: { capture.choice(for: icon).usesGlobal }, set: { follow in
+            var choice = capture.choice(for: icon)
+            if !follow {
+                // Start the icon's own look from what it shows now.
+                choice.look = capture.effectiveLook(for: icon, choice: choice)
+                choice.presetID = nil
+            }
+            choice.followsGlobal = follow
+            choice.replace = true
+            choice.manual = true
+            capture.setChoice(choice, for: icon)
+        })
+    }
+
+    /// Changes the icon's choice and marks it as replaced by hand. With
+    /// `ownStyle` the icon stops following the global style.
+    private func update(_ icon: CaptureIcon, ownStyle: Bool = false, _ change: (inout IconChoice) -> Void) {
         var choice = capture.choice(for: icon)
         change(&choice)
         choice.replace = true
         choice.manual = true
+        if ownStyle { choice.followsGlobal = false }
         capture.setChoice(choice, for: icon)
     }
 
@@ -683,18 +728,20 @@ struct CaptureDetailView: View {
     private struct RenderKey: Hashable {
         let name: String
         let choice: IconChoice?
+        let look: IconLook?
     }
 
     /// The replacement exactly as the export draws it.
     private func render(_ icon: CaptureIcon, choice: IconChoice?) {
         guard let choice, choice.replace else { rendered = nil; renderedSVG = nil; return }
-        let style = choice.look.style(pointSize: 64)
+        let look = capture.effectiveLook(for: icon, choice: choice)
+        let style = look.style(pointSize: 64)
         guard let drawing = SymbolPipeline.renderDrawing(name: choice.symbol, style: style) else {
             rendered = nil
             renderedSVG = nil
             return
         }
-        let box = capture.box(for: icon, look: choice.look, options: CaptureExportOptions())
+        let box = capture.box(for: icon, look: look, options: CaptureExportOptions())
         let layout = SVGWriter.layout(for: drawing.drawing, frame: drawing.frame, width: icon.canvas.width,
                                       height: icon.canvas.height, padding: 0.1, fit: .contain, box: box)
         // Enough pixels for the 120 pt tile on this screen.
@@ -1042,57 +1089,144 @@ private struct SymbolTileGrid: View {
     }
 }
 
-struct BulkApplySheet: View {
+/// The look every icon gets unless it was styled on its own, with a live
+/// preview of icons that follow it.
+struct GlobalStyleSheet: View {
     @EnvironmentObject private var capture: CaptureStore
     @Environment(\.dismiss) private var dismiss
-    let done: (Int) -> Void
-    @State private var presetID = LookPreset.all[0].id
-    @State private var overwriteBulk = false
-    @State private var overwriteManual = false
-
-    private let samples = ["heart.fill", "camera.fill", "magnifyingglass", "person.2.fill"]
+    var done: (String) -> Void = { _ in }
+    @State private var confirmReset = false
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
-                    ForEach(LookPreset.all) { preset in
-                        Button { presetID = preset.id } label: {
-                            HStack(spacing: 8) {
-                                ForEach(samples, id: \.self) { symbol in
-                                    LookSymbol(symbol: symbol, look: preset.look(for: nil), side: 40).frame(width: 40, height: 40)
-                                }
-                                Text(preset.title).foregroundStyle(.primary)
-                                Spacer()
-                                if preset.id == presetID { Image(systemName: "checkmark").foregroundStyle(.tint) }
-                            }
-                        }
-                    }
+                    preview
                 } header: {
-                    Text("选一种风格")
+                    Text("预览")
+                } footer: {
+                    Text("这里是跟随全局风格的图标。改下面的设置，它们会一起变；单独设置过风格的图标不受影响。")
                 }
                 Section {
-                    Toggle("也改之前一键套用的", isOn: $overwriteBulk)
-                    Toggle("也改我逐个调过的", isOn: $overwriteManual)
-                        .tint(.red)
-                    LabeledContent("会改动", value: "\(capture.bulkCount(overwriteBulk: overwriteBulk, overwriteManual: overwriteManual)) 个图标")
+                    presets
+                } header: {
+                    Text("从预设开始")
                 } footer: {
-                    Text("默认只给待定的图标套风格（用推荐的第一个符号）；你逐个调过的、标了“不替换”的和装饰类素材都不动。打开开关会改到已有的设置，改之前会自动备份，可在菜单“恢复替换设置”里找回。已选过的符号保留不变。")
+                    Text("点一个预设，把它的模式、粗细和配色作为全局风格，再在下面细调。")
+                }
+                Section {
+                    LookEditor(look: lookBinding)
+                    Toggle("主色用微信原来的颜色", isOn: originalColorBinding)
+                } header: {
+                    Text("全局样式")
+                } footer: {
+                    Text("“主色用微信原来的颜色”打开后，警告图标保持红色、勾选保持绿色这类原有颜色，只换形状和其余配色；没有记录到颜色的图标用上面的主色。")
+                }
+                Section {
+                    LabeledContent("跟随全局", value: "\(capture.styleCounts.global) 个")
+                    LabeledContent("单独设置（不受影响）", value: "\(capture.styleCounts.own) 个")
+                    Button {
+                        let count = capture.fillPending()
+                        done("已把 \(count) 个待定图标设为替换，跟随全局风格")
+                        dismiss()
+                    } label: {
+                        Label("把待定的 \(capture.fillableIcons.count) 个都设为替换（用推荐符号）", systemImage: "checkmark.circle")
+                    }
+                    .disabled(capture.fillableIcons.isEmpty)
+                    Button(role: .destructive) { confirmReset = true } label: {
+                        Label("把单独设置的也改回跟随全局…", systemImage: "arrow.uturn.backward")
+                    }
+                    .disabled(capture.styleCounts.own == 0)
+                } header: {
+                    Text("范围")
+                } footer: {
+                    Text("待定的图标设为替换时用推荐的第一个符号；装饰类素材（阴影、背景、加载动画等）不会被设上。")
                 }
             }
-            .navigationTitle("一键套用")
+            .navigationTitle("全局风格")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("套用") {
-                        guard let preset = LookPreset.named(presetID) else { return }
-                        done(capture.apply(preset, overwriteBulk: overwriteBulk, overwriteManual: overwriteManual))
-                        dismiss()
-                    }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .confirmationDialog("把单独设置的图标改回跟随全局？", isPresented: $confirmReset, titleVisibility: .visible) {
+                Button("改回跟随全局", role: .destructive) {
+                    let count = capture.resetOwnStyles()
+                    done("\(count) 个图标改回跟随全局风格")
+                }
+            } message: {
+                Text("它们选的符号不变，只是风格改为全局风格。改之前会自动备份，可在“恢复替换设置”里找回。")
+            }
+        }
+    }
+
+    private struct Sample: Identifiable {
+        let name: String
+        let symbol: String
+        let look: IconLook
+        var id: String { name }
+    }
+
+    /// Up to twelve icons that follow the global style, or undecided ones
+    /// with a suggested symbol when nothing follows it yet.
+    private var samples: [Sample] {
+        var result: [Sample] = []
+        for icon in capture.icons where result.count < 12 {
+            guard let choice = capture.choices[icon.name], choice.replace, choice.usesGlobal else { continue }
+            result.append(Sample(name: icon.name, symbol: choice.symbol, look: capture.effectiveLook(for: icon, choice: choice)))
+        }
+        if result.isEmpty {
+            for icon in capture.fillableIcons.prefix(12) {
+                let choice = capture.choice(for: icon)
+                result.append(Sample(name: icon.name, symbol: choice.symbol, look: capture.effectiveLook(for: icon, choice: choice)))
+            }
+        }
+        return result
+    }
+
+    private var preview: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: 8)], spacing: 10) {
+            ForEach(samples) { sample in
+                OptionTile(selected: false, caption: sample.name) {
+                    LookSymbol(symbol: sample.symbol, look: sample.look, side: 56)
                 }
             }
         }
+        .padding(.vertical, 4)
+    }
+
+    private var presets: some View {
+        let symbol = samples.first?.symbol ?? "heart.fill"
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(LookPreset.all) { preset in
+                    Button {
+                        var style = capture.global
+                        style.look = preset.look(for: nil)
+                        capture.setGlobal(style)
+                    } label: {
+                        OptionTile(selected: capture.global.look == preset.look(for: nil), caption: preset.title) {
+                            LookSymbol(symbol: symbol, look: preset.look(for: nil), side: 56)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private var lookBinding: Binding<IconLook> {
+        Binding(get: { capture.global.look }, set: { look in
+            var style = capture.global
+            style.look = look
+            capture.setGlobal(style)
+        })
+    }
+
+    private var originalColorBinding: Binding<Bool> {
+        Binding(get: { capture.global.useOriginalColor }, set: { value in
+            var style = capture.global
+            style.useOriginalColor = value
+            capture.setGlobal(style)
+        })
     }
 }
 
@@ -1151,8 +1285,15 @@ struct BackupSheet: View {
 }
 
 struct CaptureExportSheet: View {
+    enum Target: String, CaseIterable, Identifiable {
+        case plugin, generic
+        var id: String { rawValue }
+        var title: String { self == .plugin ? "替换插件包" : "通用（PNG + SVG）" }
+    }
+
     @EnvironmentObject private var capture: CaptureStore
     @Environment(\.dismiss) private var dismiss
+    @State private var target = Target.plugin
     @State private var scales = [3]
     @State private var formats = BatchFormats.both
     @State private var svgScale: CGFloat = 1
@@ -1169,23 +1310,32 @@ struct CaptureExportSheet: View {
         NavigationStack {
             List {
                 Section {
-                    Picker("倍率", selection: $scales) {
-                        Text("@3x").tag([3])
-                        Text("@2x").tag([2])
-                        Text("@2x + @3x").tag([2, 3])
+                    Picker("导出给", selection: $target) {
+                        ForEach(Target.allCases) { Text($0.title).tag($0) }
                     }
-                    Picker("格式", selection: $formats) {
-                        Text("PNG + SVG").tag(BatchFormats.both)
-                        Text("仅 PNG").tag(BatchFormats.png)
-                        Text("仅 SVG").tag(BatchFormats.svg)
-                    }
-                    Picker("SVG 标注尺寸", selection: $svgScale) {
-                        Text("和原图一样").tag(CGFloat(1))
-                        Text("放大 10 倍").tag(CGFloat(10))
+                    if target == .generic {
+                        Picker("倍率", selection: $scales) {
+                            Text("@3x").tag([3])
+                            Text("@2x").tag([2])
+                            Text("@2x + @3x").tag([2, 3])
+                        }
+                        Picker("格式", selection: $formats) {
+                            Text("PNG + SVG").tag(BatchFormats.both)
+                            Text("仅 PNG").tag(BatchFormats.png)
+                            Text("仅 SVG").tag(BatchFormats.svg)
+                        }
+                        Picker("SVG 标注尺寸", selection: $svgScale) {
+                            Text("和原图一样").tag(CGFloat(1))
+                            Text("放大 10 倍").tag(CGFloat(10))
+                        }
                     }
                     Toggle("对齐原图位置", isOn: $align)
                 } footer: {
-                    Text("文件按微信素材名命名：name@3x.png，SVG 在 svg/ 文件夹。画布和原图一样大；对齐原图位置时，图形放在原图内容所在的矩形里。zip 里还有 plan.json，可以在“批量导出”页重新导入。\nSVG 是矢量，内容不受“标注尺寸”影响；只是“文件”这类预览会按标注尺寸先画成图片，24×24 的图标放大看就糊。想在手机上预览清楚就选放大 10 倍，交给微信用建议保持和原图一样。")
+                    if target == .plugin {
+                        Text("和替换插件的模板一样：位图素材写成 png/名字@3x.png（模板里有深色版的再写一份到 png-dark/），SVG 素材写成 svg/名字.svg，manifest.json 里每个文件一条，带 inApp。只包含要替换的图标，可以直接在插件的“图标替换”里导入。画布和原图一样大；对齐原图位置时，图形放在原图内容所在的矩形里。")
+                    } else {
+                        Text("文件按微信素材名命名：name@3x.png，SVG 在 svg/ 文件夹。画布和原图一样大；对齐原图位置时，图形放在原图内容所在的矩形里。zip 里还有 plan.json，可以在“批量导出”页重新导入。\nSVG 是矢量，内容不受“标注尺寸”影响；只是“文件”这类预览会按标注尺寸先画成图片，24×24 的图标放大看就糊。想在手机上预览清楚就选放大 10 倍。")
+                    }
                 }
                 Section {
                     Button { Task { await export() } } label: {
@@ -1238,6 +1388,13 @@ struct CaptureExportSheet: View {
         summary = nil
         defer { running = false }
         do {
+            if target == .plugin {
+                summary = try await PluginExporter.export(capture, options: options) { finished, count in
+                    done = finished
+                    total = count
+                }
+                return
+            }
             let plan = capture.resolvedPlan(options)
             total = plan.icons.count
             let json = try capture.planJSON(options)

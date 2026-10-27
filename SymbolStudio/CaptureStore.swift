@@ -30,6 +30,8 @@ struct CaptureImportSummary {
     /// Replaced icons whose new capture differs; set aside, not applied.
     var changedKept: Int
     var skipped: [String]
+    /// The zip was the replacement plugin's template.
+    var fromTemplate = false
 }
 
 struct CaptureBackup: Identifiable {
@@ -40,11 +42,31 @@ struct CaptureBackup: Identifiable {
     var id: URL { url }
 }
 
-/// Reads a WeChatIconCapture zip: `manifest.json` plus one PNG per capture.
+/// The icon-replacement plugin's template: `manifest.json` listing
+/// `png/name@3x.png`, `png-dark/name@3x.png` and `svg/name.svg`.
+struct PluginTemplate: Decodable {
+    struct File: Decodable {
+        var icon: String
+        var path: String
+        var format: String
+        var appearance: String?
+        var width: Double?
+        var height: Double?
+        var inApp: String?
+    }
+
+    var wechat: String?
+    var files: [File]
+}
+
+/// Reads a WeChatIconCapture zip (`manifest.json` plus one PNG per capture)
+/// or the icon-replacement plugin's template zip.
 enum CaptureImporter {
     struct Imported {
         var icon: CaptureIcon
         var png: Data
+        /// The resource's own SVG, from a plugin template.
+        var svg: Data? = nil
     }
 
     struct Result {
@@ -52,6 +74,7 @@ enum CaptureImporter {
         var device: String?
         var icons: [Imported]
         var skipped: [String]
+        var isTemplate = false
     }
 
     static func read(zip data: Data) throws -> Result {
@@ -59,12 +82,16 @@ enum CaptureImporter {
         guard let manifestEntry = zip.entries
             .filter({ $0.path == "manifest.json" || $0.path.hasSuffix("/manifest.json") })
             .min(by: { $0.path.count < $1.path.count }) else {
-            throw StudioError.resource("zip 里没有 manifest.json。请导入抓图工具导出的 zip。")
+            throw StudioError.resource("zip 里没有 manifest.json。请导入抓图工具或替换插件导出的 zip。")
         }
         let base = String(manifestEntry.path.dropLast("manifest.json".count))
+        let manifestData = try zip.read(manifestEntry)
+        if let template = try? JSONDecoder().decode(PluginTemplate.self, from: manifestData),
+           !template.files.isEmpty, template.wechat != nil || template.files.contains(where: { $0.inApp != nil }) {
+            return try readTemplate(template, zip: zip, base: base)
+        }
         let manifest: CaptureManifest
-        do { manifest = try JSONDecoder().decode(CaptureManifest.self, from: zip.read(manifestEntry)) }
-        catch let error as StudioError { throw error }
+        do { manifest = try JSONDecoder().decode(CaptureManifest.self, from: manifestData) }
         catch { throw StudioError.resource("manifest.json 读不懂：\(error.localizedDescription)") }
 
         var groups: [String: [CaptureManifest.Entry]] = [:]
@@ -111,6 +138,71 @@ enum CaptureImporter {
             .compactMap { $0 }.joined(separator: " ")
         return Result(appVersion: manifest.app?.version, device: device.isEmpty ? nil : device,
                       icons: icons, skipped: skipped)
+    }
+
+    private static func readTemplate(_ template: PluginTemplate, zip: ZipReader, base: String) throws -> Result {
+        var groups: [String: [PluginTemplate.File]] = [:]
+        var order: [String] = []
+        for file in template.files {
+            let name = resourceName(file.icon)
+            guard !name.isEmpty, IconPlan.isValidPath(name), !name.contains("/") else { continue }
+            if groups[name] == nil { order.append(name) }
+            groups[name, default: []].append(file)
+        }
+        var icons: [Imported] = []
+        var skipped: [String] = []
+        for name in order {
+            let files = groups[name] ?? []
+            let light = files.filter { $0.appearance != "dark" }
+            let png = light.first { $0.format == "png" }
+            let svg = light.first { $0.format == "svg" }
+            guard let source = svg ?? png ?? files.first, let width = source.width, let height = source.height,
+                  width > 0, height > 0 else {
+                skipped.append(name)
+                continue
+            }
+            let size = CGSize(width: width, height: height)
+            let svgData = svg.flatMap { zip.entry(base + $0.path) }.flatMap { try? zip.read($0) }
+            var preview = png.flatMap { zip.entry(base + $0.path) }.flatMap { try? zip.read($0) }
+            var colors: [String] = []
+            var kind = CaptureIcon.Kind.bitmap
+            if let svgData {
+                colors = svgColors(svgData)
+                kind = colors.count > 1 || colors.contains(where: { $0 != "#000000" && $0 != "#FFFFFF" }) ? .colorful : .svg
+                if preview == nil, let document = SVGPreview.parse(svgData) { preview = SVGPreview.png(document, scale: 3) }
+            }
+            guard let image = preview else {
+                skipped.append(name)
+                continue
+            }
+            var icon = CaptureIcon(name: name, kind: kind, sizes: [size], colors: colors, angles: [], image: "",
+                                   canvas: size, inkBox: inkBox(image, canvas: size), captures: 0)
+            icon.plugin = PluginResource(formats: Array(Set(light.map { $0.format.lowercased() })).sorted(),
+                                         inApp: svg?.inApp, hasDark: files.contains { $0.appearance == "dark" && $0.format == "png" },
+                                         size: size, svgFile: nil)
+            icons.append(Imported(icon: icon, png: image, svg: svgData))
+        }
+        if icons.isEmpty { throw StudioError.resource("模板的 manifest.json 里没有能读出来的图标。") }
+        return Result(appVersion: template.wechat, device: nil, icons: icons, skipped: skipped, isTemplate: true)
+    }
+
+    /// Colors an SVG paints with, most used first, as `#RRGGBB`.
+    static func svgColors(_ data: Data) -> [String] {
+        let text = String(decoding: data, as: UTF8.self)
+        var counts: [String: Int] = [:]
+        let pattern = try? NSRegularExpression(pattern: "(?:fill|stroke|stop-color)\\s*[=:]\\s*\"?\\s*(#[0-9A-Fa-f]{3,8}|black|white)")
+        let range = NSRange(text.startIndex..., in: text)
+        for match in pattern?.matches(in: text, range: range) ?? [] {
+            guard let valueRange = Range(match.range(at: 1), in: text) else { continue }
+            var value = text[valueRange].lowercased()
+            if value == "black" { value = "#000000" }
+            if value == "white" { value = "#ffffff" }
+            var hex = String(value.dropFirst())
+            if hex.count == 3 || hex.count == 4 { hex = hex.map { "\($0)\($0)" }.joined() }
+            guard hex.count == 6 || hex.count == 8 else { continue }
+            counts["#" + hex.prefix(6).uppercased(), default: 0] += 1
+        }
+        return counts.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
     }
 
     /// `Action_JD_cart.png` → `Action_JD_cart`.
@@ -168,11 +260,13 @@ struct CaptureExportOptions {
 final class CaptureStore: ObservableObject {
     @Published private(set) var project: CaptureProject?
     @Published private(set) var choices: [String: IconChoice] = [:]
+    @Published private(set) var global = GlobalStyle()
     @Published var loadError: String?
     let suggestions = SuggestionBook.bundled()
     let root: URL
     private let images = NSCache<NSString, UIImage>()
     private var pendingSave: Task<Void, Never>?
+    private var pendingStyleSave: Task<Void, Never>?
 
     init(root: URL? = nil) {
         self.root = root ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -183,10 +277,15 @@ final class CaptureStore: ObservableObject {
     private var projectURL: URL { root.appendingPathComponent("project.json") }
     private var choicesURL: URL { root.appendingPathComponent("choices.json") }
     private var imagesFolder: URL { root.appendingPathComponent("icons", isDirectory: true) }
+    /// Next to the project folder, so the style outlives clearing the project.
+    private var styleURL: URL { root.deletingLastPathComponent().appendingPathComponent("CaptureStyle.json") }
 
     var icons: [CaptureIcon] { project?.icons ?? [] }
 
     func load() {
+        if let data = try? Data(contentsOf: styleURL), let style = try? JSONDecoder().decode(GlobalStyle.self, from: data) {
+            global = style
+        }
         guard let data = try? Data(contentsOf: projectURL) else { return }
         do {
             project = try JSONDecoder().decode(CaptureProject.self, from: data)
@@ -227,8 +326,14 @@ final class CaptureStore: ObservableObject {
             if let index = icons.firstIndex(where: { $0.name == icon.name }) {
                 var known = icons[index]
                 for size in icon.sizes where !known.sizes.contains(size) { known.sizes.append(size) }
-                for color in icon.colors where !known.colors.contains(color) { known.colors.append(color) }
                 for angle in icon.angles where !known.angles.contains(angle) { known.angles.append(angle) }
+                if result.isTemplate {
+                    try mergeTemplate(item, into: &known, taken: Set(icons.map(\.image)), changedKept: &changedKept)
+                    icons[index] = known
+                    updated += 1
+                    continue
+                }
+                for color in icon.colors where !known.colors.contains(color) { known.colors.append(color) }
                 known.captures += icon.captures
                 let larger = icon.canvas.width * icon.canvas.height > known.canvas.width * known.canvas.height
                 let moved = icon.canvas == known.canvas && !Self.sameBox(icon.inkBox, known.inkBox)
@@ -253,6 +358,11 @@ final class CaptureStore: ObservableObject {
                 icon.firstSeen = result.appVersion
                 icon.importIndex = importIndex
                 try item.png.write(to: imagesFolder.appendingPathComponent(icon.image), options: .atomic)
+                if let svg = item.svg {
+                    let file = (icon.image as NSString).deletingPathExtension + ".orig.svg"
+                    try svg.write(to: imagesFolder.appendingPathComponent(file), options: .atomic)
+                    icon.plugin?.svgFile = file
+                }
                 icons.append(icon)
                 added += 1
             }
@@ -264,7 +374,53 @@ final class CaptureStore: ObservableObject {
         try saveProject()
         try saveChoices()
         return CaptureImportSummary(version: result.appVersion, added: added, updated: updated,
-                                    changedKept: changedKept, skipped: result.skipped)
+                                    changedKept: changedKept, skipped: result.skipped, fromTemplate: result.isTemplate)
+    }
+
+    /// Takes a plugin template entry into an icon that is already known. The
+    /// template's size is the resource's own, so it becomes the canvas. A
+    /// captured image stays as the preview when the visible area sits in the
+    /// same place relative to the canvas; an icon that already has a
+    /// replacement and whose original moved gets the template set aside.
+    private func mergeTemplate(_ item: CaptureImporter.Imported, into known: inout CaptureIcon,
+                               taken: Set<String>, changedKept: inout Int) throws {
+        let icon = item.icon
+        var resource = icon.plugin
+        if let svg = item.svg {
+            let file = known.plugin?.svgFile ?? ((known.image as NSString).deletingPathExtension + ".orig.svg")
+            try svg.write(to: imagesFolder.appendingPathComponent(file), options: .atomic)
+            resource?.svgFile = file
+        }
+        known.plugin = resource
+        if known.colors.isEmpty { known.colors = icon.colors }
+        if known.captures == 0 { known.kind = icon.kind }
+        let sameShape = Self.sameRelativeBox(icon.inkBox, icon.canvas, known.inkBox, known.canvas)
+        if sameShape && known.captures > 0 {
+            // Keep the captured picture, measured on the resource's own canvas.
+            let sx = icon.canvas.width / max(known.canvas.width, 0.001), sy = icon.canvas.height / max(known.canvas.height, 0.001)
+            known.inkBox = known.inkBox.map { CGRect(x: $0.minX * sx, y: $0.minY * sy, width: $0.width * sx, height: $0.height * sy) }
+            known.canvas = icon.canvas
+        } else if sameShape || choices[known.name] == nil {
+            try item.png.write(to: imagesFolder.appendingPathComponent(known.image), options: .atomic)
+            images.removeObject(forKey: known.image as NSString)
+            known.canvas = icon.canvas
+            known.inkBox = icon.inkBox
+        } else {
+            let file = known.update?.image ?? Self.imageFileName(known.name + "_new", taken: taken)
+            try item.png.write(to: imagesFolder.appendingPathComponent(file), options: .atomic)
+            images.removeObject(forKey: file as NSString)
+            known.update = CaptureUpdate(image: file, canvas: icon.canvas, inkBox: icon.inkBox, version: project?.appVersion)
+            changedKept += 1
+        }
+    }
+
+    /// Visible areas in the same place relative to their canvases, within 4%.
+    private static func sameRelativeBox(_ a: CGRect?, _ canvasA: CGSize, _ b: CGRect?, _ canvasB: CGSize) -> Bool {
+        guard let a, let b else { return a == nil && b == nil }
+        func relative(_ r: CGRect, _ c: CGSize) -> [CGFloat] {
+            [r.minX / max(c.width, 0.001), r.minY / max(c.height, 0.001), r.maxX / max(c.width, 0.001), r.maxY / max(c.height, 0.001)]
+        }
+        return zip(relative(a, canvasA), relative(b, canvasB)).allSatisfy { abs($0 - $1) < 0.04 }
     }
 
     /// Visible areas within 0.75 pt of each other count as the same.
@@ -404,12 +560,37 @@ final class CaptureStore: ObservableObject {
     func isDecorative(_ icon: CaptureIcon) -> Bool { suggestions.isDecorative(icon.name) }
     func symbols(for icon: CaptureIcon) -> [String] { suggestions.symbols(for: icon.name) }
 
-    /// The saved choice, or what a new one would start from.
+    /// The saved choice, or what a new one would start from: the first
+    /// suggested symbol in the global style.
     func choice(for icon: CaptureIcon) -> IconChoice {
         if let saved = choices[icon.name] { return saved }
-        let preset = LookPreset.all[0]
         return IconChoice(replace: false, symbol: symbols(for: icon).first ?? "questionmark.square.dashed",
-                          look: preset.look(for: icon), presetID: preset.id)
+                          look: global.look, presetID: nil, manual: nil, followsGlobal: true)
+    }
+
+    /// How the icon is drawn: its own look, or the global style.
+    func effectiveLook(for icon: CaptureIcon, choice: IconChoice) -> IconLook {
+        guard choice.usesGlobal else { return choice.look }
+        var look = global.look
+        if global.useOriginalColor, look.mode != .multicolor, look.badge == nil,
+           let original = icon.mainColor.flatMap({ RGBA(hex: $0) }) {
+            let first = look.fills.first
+            let fill = first.map { $0.isSolid ? GradientFill(solid: original) : GradientFill(original, original.shifted(), angle: $0.angle) }
+                ?? GradientFill(solid: original)
+            if look.fills.isEmpty { look.fills = [fill] } else { look.fills[0] = fill }
+        }
+        return look
+    }
+
+    func setGlobal(_ style: GlobalStyle) {
+        global = style
+        pendingStyleSave?.cancel()
+        pendingStyleSave = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled, let self else { return }
+            try? FileManager.default.createDirectory(at: self.styleURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? JSONEncoder().encode(self.global).write(to: self.styleURL, options: .atomic)
+        }
     }
 
     func setChoice(_ choice: IconChoice?, for icon: CaptureIcon) {
@@ -470,31 +651,43 @@ final class CaptureStore: ObservableObject {
         }
     }
 
-    /// Whether bulk apply would change this icon. Undecided icons with a
-    /// suggested symbol always; replaced ones only when their kind of choice
-    /// (bulk or hand-made) is allowed; "keep" never.
-    private func bulkTarget(_ icon: CaptureIcon, overwriteBulk: Bool, overwriteManual: Bool) -> Bool {
-        guard let existing = choices[icon.name] else {
-            return !isDecorative(icon) && !symbols(for: icon).isEmpty
-        }
-        guard existing.replace else { return false }
-        return existing.isManual ? overwriteManual : overwriteBulk
+    /// Replaced icons drawn with the global style, and ones with their own look.
+    var styleCounts: (global: Int, own: Int) {
+        let replaced = choices.values.filter(\.replace)
+        let following = replaced.filter(\.usesGlobal).count
+        return (following, replaced.count - following)
     }
 
-    func bulkCount(overwriteBulk: Bool, overwriteManual: Bool) -> Int {
-        icons.filter { bulkTarget($0, overwriteBulk: overwriteBulk, overwriteManual: overwriteManual) }.count
+    /// Undecided icons that have a suggested symbol and are not decorative.
+    var fillableIcons: [CaptureIcon] {
+        icons.filter { choices[$0.name] == nil && !isDecorative($0) && !symbols(for: $0).isEmpty }
     }
 
-    /// Applies `preset` to the icons `bulkTarget` picks. A symbol that was
-    /// already chosen stays. The choices are backed up first whenever an
-    /// existing one would change.
-    func apply(_ preset: LookPreset, overwriteBulk: Bool = false, overwriteManual: Bool = false) -> Int {
-        let targets = icons.filter { bulkTarget($0, overwriteBulk: overwriteBulk, overwriteManual: overwriteManual) }
-        if targets.contains(where: { choices[$0.name] != nil }) { backupChoices(reason: "一键套用「\(preset.title)」之前") }
+    /// Marks every fillable icon as replaced with its first suggested symbol,
+    /// drawn in the global style.
+    @discardableResult
+    func fillPending() -> Int {
+        let targets = fillableIcons
         for icon in targets {
-            guard let symbol = choices[icon.name]?.symbol ?? symbols(for: icon).first else { continue }
-            choices[icon.name] = IconChoice(replace: true, symbol: symbol, look: preset.look(for: icon),
-                                            presetID: preset.id, manual: false)
+            guard let symbol = symbols(for: icon).first else { continue }
+            choices[icon.name] = IconChoice(replace: true, symbol: symbol, look: global.look, presetID: nil,
+                                            manual: false, followsGlobal: true)
+        }
+        pendingSave?.cancel()
+        try? saveChoices()
+        return targets.count
+    }
+
+    /// Puts every replaced icon with its own look back on the global style,
+    /// after a backup. Symbols stay.
+    @discardableResult
+    func resetOwnStyles() -> Int {
+        let targets = choices.filter { $0.value.replace && !$0.value.usesGlobal }
+        guard !targets.isEmpty else { return 0 }
+        backupChoices(reason: "全部改回跟随全局风格之前")
+        for (name, var choice) in targets {
+            choice.followsGlobal = true
+            choices[name] = choice
         }
         pendingSave?.cancel()
         try? saveChoices()
@@ -534,7 +727,7 @@ final class CaptureStore: ObservableObject {
                 issues.append(PlanIssue(severity: .error, icon: icon.name, message: "这个系统里没有符号 “\(choice.symbol)”。"))
                 continue
             }
-            let look = choice.look
+            let look = effectiveLook(for: icon, choice: choice)
             let colors = look.fills.map { ColorChoice.custom($0.start) }
             icons.append(ResolvedIcon(index: icons.count, names: [icon.name], symbol: choice.symbol, mode: look.mode,
                                       weight: look.weight, scale: .medium, pointSize: 64, gradient: look.gradientRendering,
@@ -552,7 +745,7 @@ final class CaptureStore: ObservableObject {
         var entries: [[String: Any]] = []
         for icon in icons {
             guard let choice = choices[icon.name], choice.replace else { continue }
-            let look = choice.look
+            let look = effectiveLook(for: icon, choice: choice)
             let box = box(for: icon, look: look, options: options)
             var entry: [String: Any] = [
                 "file": icon.name, "symbol": choice.symbol, "mode": look.mode.rawValue, "weight": look.weight.rawValue,
@@ -567,7 +760,7 @@ final class CaptureStore: ObservableObject {
                 entry["badge"] = ["shape": badge.shape.rawValue, "fill": badge.fill.planText, "glyph": badge.glyphScale] as [String: Any]
             }
             if let title = title(for: icon) { entry["note"] = title }
-            if let preset = choice.presetID { entry["_preset"] = preset }
+            if choice.usesGlobal { entry["_global"] = true } else if let preset = choice.presetID { entry["_preset"] = preset }
             entries.append(entry)
         }
         let plan: [String: Any] = [

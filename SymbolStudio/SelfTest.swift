@@ -132,6 +132,7 @@ enum SelfTest {
         failures += await batchTest(directory: directory)
         failures += await fileTest(directory: directory)
         failures += await captureTest()
+        failures += await templateTest()
         failures += presetFlatTest()
         print("SELFTEST-DONE failures=\(failures)")
         fflush(stdout)
@@ -287,7 +288,8 @@ enum SelfTest {
             print("CAPTURE-IMPORT added=\(first.added) updated=\(first.updated) skipped=\(first.skipped)")
             if first.added != 3 || store.icons.count != 3 || store.icons.contains(where: { $0.inkBox == nil }) { failures += 1 }
 
-            let applied = store.apply(LookPreset.all[0])
+            store.setGlobal(GlobalStyle(look: LookPreset.all[0].look(for: nil)))
+            let applied = store.fillPending()
             print("CAPTURE-APPLY \(applied)")
             if applied != 3 { failures += 1 }
             if let icon = store.icons.first(where: { $0.name == "AS_Email" }), let preset = LookPreset.named("badgeViolet") {
@@ -295,6 +297,7 @@ enum SelfTest {
                 choice.look = preset.look(for: icon)
                 choice.presetID = preset.id
                 choice.manual = true
+                choice.followsGlobal = false
                 store.setChoice(choice, for: icon)
             }
 
@@ -345,11 +348,16 @@ enum SelfTest {
                 if adopted?.canvas.width != 48 || adopted?.update != nil { failures += 1 }
             }
 
-            let reapplied = store.apply(LookPreset.named("sunset") ?? LookPreset.all[1], overwriteBulk: true)
-            let emailPreset = store.choices["AS_Email"]?.presetID ?? "-"
-            let heartPreset = store.choices["heart_filled"]?.presetID ?? "-"
-            print("CAPTURE-REAPPLY changed=\(reapplied) emailPreset=\(emailPreset) heartPreset=\(heartPreset)")
-            if reapplied != 2 || emailPreset != "badgeViolet" || heartPreset != "sunset" { failures += 1 }
+            // Changing the global style moves the icons that follow it, not the one styled on its own.
+            var sunset = store.global
+            sunset.look = (LookPreset.named("sunset") ?? LookPreset.all[1]).look(for: nil)
+            store.setGlobal(sunset)
+            let looks = store.icons.compactMap { icon in store.choices[icon.name].map { (icon.name, store.effectiveLook(for: icon, choice: $0)) } }
+            let heartFollows = looks.first { $0.0 == "heart_filled" }?.1 == sunset.look
+            let emailOwn = looks.first { $0.0 == "AS_Email" }?.1.badge != nil
+            let counts = store.styleCounts
+            print("CAPTURE-GLOBAL heartFollows=\(heartFollows) emailOwn=\(emailOwn) following=\(counts.global) own=\(counts.own)")
+            if !heartFollows || !emailOwn || counts.own != 1 { failures += 1 }
 
             let kept = store.choices
             _ = try await store.importCapture(newer, merge: false)
@@ -364,7 +372,106 @@ enum SelfTest {
         }
         try? FileManager.default.removeItem(at: root)
         try? FileManager.default.removeItem(at: store.backupsFolder)
+        try? FileManager.default.removeItem(at: root.deletingLastPathComponent().appendingPathComponent("CaptureStyle.json"))
         return failures
+    }
+
+    /// Merges a replacement-plugin template into a captured project (an SVG
+    /// resource drawn by the preview renderer, a bitmap with a dark copy, and
+    /// an SVG for an icon the capture already has), then exports the plugin package.
+    private static func templateTest() async -> Int {
+        var failures = 0
+        print("=== TEMPLATE import and plugin export")
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("TemplateSelfTest", isDirectory: true)
+        try? FileManager.default.removeItem(at: root)
+        guard let captureData = Data(base64Encoded: captureZip) else { return 1 }
+        let store = CaptureStore(root: root)
+        try? FileManager.default.removeItem(at: store.backupsFolder)
+        do {
+            _ = try await store.importCapture(captureData, merge: false)
+            if let heart = store.icons.first(where: { $0.name == "heart_filled" }) {
+                var choice = store.choice(for: heart)
+                choice.replace = true
+                choice.manual = true
+                store.setChoice(choice, for: heart)
+            }
+            let result = try await store.importCapture(pluginTemplate(from: captureData), merge: true)
+            let ring = store.icons.first { $0.name == "tpl_ring" }
+            let heart = store.icons.first { $0.name == "heart_filled" }
+            let email = store.icons.first { $0.name == "AS_Email" }
+            func box(_ icon: CaptureIcon?) -> String {
+                icon?.inkBox.map { "\(SVGWriter.number($0.minX)),\(SVGWriter.number($0.minY)),\(SVGWriter.number($0.width)),\(SVGWriter.number($0.height))" } ?? "nil"
+            }
+            print("TEMPLATE-IMPORT template=\(result.fromTemplate) added=\(result.added) updated=\(result.updated) changedKept=\(result.changedKept)")
+            print("TEMPLATE-RING kind=\(ring?.kind.rawValue ?? "-") canvas=\(ring?.sizeText ?? "-") box=\(box(ring)) formats=\(ring?.plugin?.formats ?? []) inApp=\(ring?.plugin?.inApp ?? "-")")
+            print("TEMPLATE-HEART canvas=\(heart.map { SVGWriter.number($0.canvas.width) } ?? "-") box=\(box(heart)) inApp=\(heart?.plugin?.inApp ?? "-") update=\(heart?.update != nil)")
+            print("TEMPLATE-EMAIL formats=\(email?.plugin?.formats ?? []) dark=\(email?.plugin?.hasDark ?? false)")
+            if let ring, let png = store.image(for: ring)?.pngData() { print("TEMPLATE-RING-PNG \(png.base64EncodedString())") }
+            let ringBox = ring?.inkBox ?? .zero
+            let ringOK = ring?.kind == .svg && abs(ringBox.minX - 2) < 0.7 && abs(ringBox.maxX - 22) < 0.7 && abs(ringBox.minY - 2) < 0.7
+            if !result.fromTemplate || result.added != 1 || result.updated != 2 || result.changedKept != 0 || !ringOK
+                || ring?.plugin?.inApp != "tpl_ring.svg" || heart?.plugin?.inApp != "heart_filled.svg" || heart?.update != nil
+                || email?.plugin?.hasDark != true { failures += 1 }
+
+            store.fillPending()
+            let summary = try await PluginExporter.export(store, options: CaptureExportOptions()) { _, _ in }
+            let zipData = try Data(contentsOf: summary.url)
+            let zip = try ZipReader(data: zipData)
+            let paths = zip.entries.map(\.path).sorted()
+            let manifestData = try zip.entry("manifest.json").map { try zip.read($0) } ?? Data()
+            let manifest = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
+            let files = manifest?["files"] as? [[String: Any]] ?? []
+            let heartEntry = files.first { $0["path"] as? String == "svg/heart_filled.svg" }
+            print("TEMPLATE-EXPORT paths=\(paths) wechat=\(manifest?["wechat"] ?? "-") files=\(files.count) heart=\(heartEntry ?? [:]) skipped=\(summary.skipped.map(\.reason))")
+            print("TEMPLATE-ZIP-BASE64 \(zipData.base64EncodedString())")
+            let expected = ["manifest.json", "png-dark/AS_Email@3x.png", "png/AS_Email@3x.png", "svg/arrow_right_regular.svg", "svg/heart_filled.svg"]
+            if paths != expected || manifest?["wechat"] as? String != "8.0.80" || files.count != 4
+                || heartEntry?["inApp"] as? String != "heart_filled.svg" || heartEntry?["width"] as? Int != 24 { failures += 1 }
+        } catch {
+            print("TEMPLATE-ERROR \(error.localizedDescription)")
+            failures += 1
+        }
+        try? FileManager.default.removeItem(at: root)
+        try? FileManager.default.removeItem(at: store.backupsFolder)
+        return failures
+    }
+
+    /// A plugin template like the plugin exports: version 8.0.80, a new SVG
+    /// resource, an SVG for heart_filled, and AS_Email as a bitmap with a dark copy.
+    private static func pluginTemplate(from captureData: Data) throws -> Data {
+        let capture = try ZipReader(data: captureData)
+        guard let email = capture.entries.first(where: { $0.path.hasSuffix("AS_Email_32x32@3x.png") }) else {
+            throw StudioError.resource("test capture has no AS_Email")
+        }
+        let emailPNG = try capture.read(email)
+        let ring = """
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
+        <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2a10 10 0 1 1 0 20a10 10 0 1 1 0-20zm0 4a6 6 0 1 0 0 12A6 6 0 1 0 12 6z" fill="#000"/>\
+        <g transform="translate(12 12) rotate(45)"><rect x="-1" y="-9" width="2" height="18" rx="1" fill="black" fill-opacity=".5"/></g></svg>
+        """
+        let heart = """
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">\
+        <rect x="2.7" y="4.7" width="18.6" height="16" rx="4" fill="#000"/></svg>
+        """
+        let manifest: [String: Any] = [
+            "wechat": "8.0.80", "plan": "wechat-original-template", "generated": "test", "note": "test",
+            "files": [
+                ["format": "svg", "appearance": "light", "path": "svg/tpl_ring.svg", "icon": "tpl_ring", "width": 24, "height": 24, "inApp": "tpl_ring.svg"],
+                ["format": "svg", "appearance": "light", "path": "svg/heart_filled.svg", "icon": "heart_filled", "width": 24, "height": 24, "inApp": "heart_filled.svg"],
+                ["format": "png", "appearance": "light", "path": "png/AS_Email@3x.png", "icon": "AS_Email", "width": 32, "height": 32, "scale": 3, "mode": "original"],
+                ["format": "png", "appearance": "dark", "path": "png-dark/AS_Email@3x.png", "icon": "AS_Email", "width": 32, "height": 32, "scale": 3]
+            ] as [[String: Any]]
+        ]
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("plugin-template-test.zip")
+        try? FileManager.default.removeItem(at: url)
+        let writer = try ZipWriter(url: url)
+        try writer.add(path: "svg/tpl_ring.svg", data: Data(ring.utf8))
+        try writer.add(path: "svg/heart_filled.svg", data: Data(heart.utf8))
+        try writer.add(path: "png/AS_Email@3x.png", data: emailPNG)
+        try writer.add(path: "png-dark/AS_Email@3x.png", data: emailPNG)
+        try writer.add(path: "manifest.json", data: JSONSerialization.data(withJSONObject: manifest))
+        try writer.finish()
+        return try Data(contentsOf: url)
     }
 
     /// The test capture as a newer WeChat would give it: version 8.0.80,

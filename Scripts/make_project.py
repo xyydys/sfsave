@@ -49,7 +49,7 @@ def main():
         }
         target_settings = {
             'ASSETCATALOG_COMPILER_APPICON_NAME': 'AppIcon', 'CODE_SIGN_STYLE': 'Automatic',
-            'CURRENT_PROJECT_VERSION': '10', 'MARKETING_VERSION': '0.4.5', 'GENERATE_INFOPLIST_FILE': 'NO',
+            'CURRENT_PROJECT_VERSION': '11', 'MARKETING_VERSION': '0.5.0', 'GENERATE_INFOPLIST_FILE': 'NO',
             'INFOPLIST_FILE': 'SymbolStudio/Info.plist', 'PRODUCT_BUNDLE_IDENTIFIER': 'com.runyu.symbolstudio',
             'PRODUCT_NAME': '$(TARGET_NAME)', 'TARGETED_DEVICE_FAMILY': '1,2',
             'SUPPORTS_MACCATALYST': 'NO', 'SWIFT_EMIT_LOC_STRINGS': 'YES',

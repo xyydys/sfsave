@@ -89,6 +89,8 @@ struct CaptureIcon: Codable, Identifiable, Equatable {
     /// A newer capture with a different canvas or visible area, kept aside
     /// because the icon already has a replacement tuned to the old one.
     var update: CaptureUpdate? = nil
+    /// What the icon-replacement plugin's template says about this resource.
+    var plugin: PluginResource? = nil
 
     /// The color WeChat uses most for this icon, if it tints it.
     var mainColor: String? { colors.first }
@@ -132,6 +134,27 @@ struct IconLook: Codable, Hashable {
     var layerCount: Int { mode == .palette ? min(max(fills.count, 2), 3) : 1 }
 }
 
+/// One resource as listed in the plugin's template `manifest.json`.
+struct PluginResource: Codable, Equatable {
+    /// `png` and/or `svg`: the files the plugin takes for this resource.
+    var formats: [String]
+    /// The SVG's file name inside WeChat (`inApp`).
+    var inApp: String?
+    /// The template also has `png-dark/name@3x.png`.
+    var hasDark: Bool
+    /// `width` × `height` from the template, in points.
+    var size: CGSize
+    /// WeChat's own SVG, kept in the project's `icons` folder.
+    var svgFile: String?
+}
+
+/// The look every icon gets unless it was styled on its own.
+struct GlobalStyle: Codable, Equatable {
+    var look = IconLook(mode: .hierarchical, fills: [GradientFill(solid: RGBA(red: 0.2, green: 0.47, blue: 0.96))], weight: .medium)
+    /// The first color comes from the color WeChat draws the icon in, when known.
+    var useOriginalColor = false
+}
+
 struct CaptureUpdate: Codable, Equatable {
     var image: String
     var canvas: CGSize
@@ -149,8 +172,12 @@ struct IconChoice: Codable, Hashable {
     /// Set by the per-icon screen, cleared by bulk apply. Choices saved
     /// before this existed count as hand-made.
     var manual: Bool? = nil
+    /// Drawn with the global style instead of `look`. Choices saved before
+    /// this existed follow it unless they were styled by hand.
+    var followsGlobal: Bool? = nil
 
     var isManual: Bool { manual ?? true }
+    var usesGlobal: Bool { followsGlobal ?? !isManual }
 }
 
 private func hexColor(_ hex: String) -> RGBA { RGBA(hex: hex) ?? .black }
