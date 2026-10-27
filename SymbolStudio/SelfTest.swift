@@ -177,17 +177,26 @@ enum SelfTest {
         print("=== FILES document pickers")
         let saved = directory.appendingPathComponent("picker-test.txt")
         try? Data("picker".utf8).write(to: saved)
+        // The picker loads its remote view first and only then appears, so poll.
+        func waitFor(_ seconds: Double, _ condition: () -> Bool) async -> Double? {
+            let start = Date()
+            while Date().timeIntervalSince(start) < seconds {
+                if condition() { return Date().timeIntervalSince(start) }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            return nil
+        }
         for kind in ["open", "save"] {
             let shown = kind == "open"
                 ? DocumentPicker.open(PlanFile.types) { _ in }
                 : DocumentPicker.save(saved) { }
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            let after = await waitFor(15) { DocumentPicker.topController() is UIDocumentPickerViewController }
             let top = DocumentPicker.topController()
-            let ok = shown && top is UIDocumentPickerViewController
-            print("FILES-PICKER \(kind) shown=\(shown) top=\(top.map { String(describing: type(of: $0)) } ?? "none") \(ok ? "ok" : "FAILED")")
+            let ok = shown && after != nil
+            print("FILES-PICKER \(kind) shown=\(shown) after=\(after.map { String(format: "%.1fs", $0) } ?? "-") top=\(top.map { String(describing: type(of: $0)) } ?? "none") \(ok ? "ok" : "FAILED")")
             if !ok { failures += 1 }
-            if top is UIDocumentPickerViewController { top?.dismiss(animated: false) }
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            if let top, top is UIDocumentPickerViewController { top.dismiss(animated: false) }
+            _ = await waitFor(5) { !(DocumentPicker.topController() is UIDocumentPickerViewController) }
         }
 
         print("=== FILES plan from file")
