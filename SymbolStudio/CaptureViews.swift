@@ -416,7 +416,7 @@ struct CaptureDetailView: View {
             } header: {
                 Text("符号")
             } footer: {
-                Text("前几个是按这个素材的用途挑的，点放大镜可以在全部符号里搜（中英文都行）。")
+                Text("前几个是按这个素材的用途挑的。点放大镜按分类找，也可以直接搜索（中英文都行）。")
             }
             Section {
                 presetGrid(icon, choice: choice)
@@ -549,7 +549,7 @@ struct CaptureDetailView: View {
                 }
                 Button { showPicker = true } label: {
                     OptionTile(selected: false, caption: "更多符号") {
-                        Image(systemName: "magnifyingglass").font(.title2).foregroundStyle(.tint)
+                        Image(systemName: "square.grid.2x2").font(.title2).foregroundStyle(.tint)
                     }
                 }
                 .buttonStyle(.plain)
@@ -836,6 +836,8 @@ extension RGBA {
 
 // MARK: - Sheets
 
+/// Picks a symbol: the categories come first, each opening its symbols drawn
+/// in the icon's current look. The search field searches every symbol.
 struct SymbolPickerSheet: View {
     @EnvironmentObject private var store: StudioStore
     @Environment(\.dismiss) private var dismiss
@@ -843,37 +845,140 @@ struct SymbolPickerSheet: View {
     let picked: (String) -> Void
     @State private var query = ""
 
+    private enum Page: Hashable {
+        case favorites, recent, other
+        case category(String)
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: 8)], spacing: 10) {
-                    ForEach(results, id: \.name) { item in
-                        Button {
-                            picked(item.name)
-                            dismiss()
-                        } label: {
-                            OptionTile(selected: false, caption: item.name) {
-                                LookSymbol(symbol: item.name, look: look, side: 56)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
+            Group {
+                if store.catalog == nil {
+                    ProgressView("正在准备图标库…")
+                } else if query.trimmingCharacters(in: .whitespaces).isEmpty {
+                    categoryList
+                } else {
+                    SymbolTileGrid(items: searchResults, look: look, pick: choose)
                 }
-                .padding()
-                if store.catalog == nil { ProgressView().padding() }
             }
-            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "名称或关键词，如 heart、相机")
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "搜索全部符号，如 heart、相机")
             .navigationTitle("选择符号")
             .navigationBarTitleDisplayMode(.inline)
+            .navigationDestination(for: Page.self) { page in
+                SymbolCategoryPage(title: title(page), items: items(page), look: look, pick: choose)
+            }
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
     }
 
-    private var results: [SymbolItem] {
+    private var categoryList: some View {
+        List {
+            let favorites = store.favorites.count
+            let recent = store.recent.count
+            if favorites > 0 || recent > 0 {
+                Section {
+                    if favorites > 0 { row(.favorites, "我的收藏", "star", favorites) }
+                    if recent > 0 { row(.recent, "最近使用", "clock", recent) }
+                }
+            }
+            Section {
+                ForEach(store.catalog?.categories ?? []) { category in
+                    row(.category(category.id), category.title, category.icon, category.count)
+                }
+                let other = store.catalog?.symbols.filter { $0.categories.isEmpty }.count ?? 0
+                if other > 0 { row(.other, "未分类", "questionmark.square.dashed", other) }
+            } header: {
+                Text("分类")
+            }
+        }
+    }
+
+    private func row(_ page: Page, _ title: String, _ icon: String, _ count: Int) -> some View {
+        NavigationLink(value: page) {
+            HStack {
+                Label(title, systemImage: icon)
+                Spacer()
+                Text("\(count)").foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func title(_ page: Page) -> String {
+        switch page {
+        case .favorites: return "我的收藏"
+        case .recent: return "最近使用"
+        case .other: return "未分类"
+        case .category(let id): return store.catalog?.categories.first { $0.id == id }?.title ?? id
+        }
+    }
+
+    private func items(_ page: Page) -> [SymbolItem] {
+        let symbols = store.catalog?.symbols ?? []
+        switch page {
+        case .favorites: return store.favorites.sorted().compactMap { store.item(named: $0) }
+        case .recent: return store.recent.compactMap { store.item(named: $0) }
+        case .other: return symbols.filter { $0.categories.isEmpty }
+        case .category(let id): return symbols.filter { $0.categories.contains(id) }
+        }
+    }
+
+    private var searchResults: [SymbolItem] {
         guard let symbols = store.catalog?.symbols else { return [] }
         let text = query.trimmingCharacters(in: .whitespaces).lowercased()
-        let matches = text.isEmpty ? symbols : symbols.filter { $0.searchableText.lowercased().contains(text) }
-        return Array(matches.prefix(240))
+        return Array(symbols.filter { $0.searchableText.lowercased().contains(text) }.prefix(300))
+    }
+
+    private func choose(_ name: String) {
+        store.recordRecent(name)
+        picked(name)
+        dismiss()
+    }
+}
+
+/// One category's symbols, with a search limited to that category.
+private struct SymbolCategoryPage: View {
+    let title: String
+    let items: [SymbolItem]
+    let look: IconLook
+    let pick: (String) -> Void
+    @State private var query = ""
+
+    var body: some View {
+        SymbolTileGrid(items: filtered, look: look, pick: pick)
+            .searchable(text: $query, prompt: "在“\(title)”里搜索")
+            .navigationTitle("\(title)（\(items.count)）")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var filtered: [SymbolItem] {
+        let text = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return text.isEmpty ? items : items.filter { $0.searchableText.lowercased().contains(text) }
+    }
+}
+
+private struct SymbolTileGrid: View {
+    let items: [SymbolItem]
+    let look: IconLook
+    let pick: (String) -> Void
+
+    var body: some View {
+        ScrollView {
+            if items.isEmpty {
+                Text("没有找到符号，换个关键词试试。").foregroundStyle(.secondary).padding(.top, 40)
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 70), spacing: 8)], spacing: 10) {
+                ForEach(items, id: \.name) { item in
+                    Button { pick(item.name) } label: {
+                        OptionTile(selected: false, caption: item.name) {
+                            LookSymbol(symbol: item.name, look: look, side: 56)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding()
+        }
+        .scrollDismissesKeyboard(.interactively)
     }
 }
 
