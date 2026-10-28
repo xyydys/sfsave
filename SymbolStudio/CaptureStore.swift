@@ -504,15 +504,18 @@ final class CaptureStore: ObservableObject {
         var reason: String
         var date: Date
         var choices: [String: IconChoice]
+        /// Backups made before the global style was saved with them have none.
+        var global: GlobalStyle? = nil
     }
 
     /// Next to the project folder, so clearing or deleting the project keeps them.
     var backupsFolder: URL { root.deletingLastPathComponent().appendingPathComponent("CaptureBackups", isDirectory: true) }
 
-    /// Saves the current choices; does nothing when there are none. Keeps the newest 30.
+    /// Saves the current choices and global style; does nothing when there
+    /// is nothing of the user's yet. Keeps the newest 30.
     @discardableResult
     func backupChoices(reason: String) -> Bool {
-        guard !choices.isEmpty else { return false }
+        guard !choices.isEmpty || global != GlobalStyle() else { return false }
         let fm = FileManager.default
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -520,7 +523,7 @@ final class CaptureStore: ObservableObject {
         let url = backupsFolder.appendingPathComponent("choices-\(formatter.string(from: Date())).json")
         do {
             try fm.createDirectory(at: backupsFolder, withIntermediateDirectories: true)
-            try JSONEncoder().encode(BackupFile(reason: reason, date: Date(), choices: choices)).write(to: url, options: .atomic)
+            try JSONEncoder().encode(BackupFile(reason: reason, date: Date(), choices: choices, global: global)).write(to: url, options: .atomic)
         } catch { return false }
         for old in backups().dropFirst(30) { try? fm.removeItem(at: old.url) }
         return true
@@ -537,8 +540,9 @@ final class CaptureStore: ObservableObject {
         .sorted { $0.date > $1.date }
     }
 
-    /// Puts back every choice in the backup; choices for other icons stay.
-    /// The current choices are backed up first, so a restore can be undone.
+    /// Puts back every choice in the backup, and the global style when it has
+    /// one; choices for other icons stay. The current settings are backed up
+    /// first, so a restore can be undone.
     @discardableResult
     func restore(_ backup: CaptureBackup) throws -> Int {
         let file = try JSONDecoder().decode(BackupFile.self, from: Data(contentsOf: backup.url))
@@ -546,6 +550,7 @@ final class CaptureStore: ObservableObject {
         for (name, choice) in file.choices { choices[name] = choice }
         pendingSave?.cancel()
         try saveChoices()
+        if let saved = file.global { saveGlobalNow(saved) }
         return file.choices.count
     }
 
@@ -606,6 +611,13 @@ final class CaptureStore: ObservableObject {
             if look.fills.isEmpty { look.fills = [fill] } else { look.fills[0] = fill }
         }
         return look
+    }
+
+    private func saveGlobalNow(_ style: GlobalStyle) {
+        pendingStyleSave?.cancel()
+        global = style
+        try? FileManager.default.createDirectory(at: styleURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? JSONEncoder().encode(style).write(to: styleURL, options: .atomic)
     }
 
     func setGlobal(_ style: GlobalStyle) {
@@ -731,6 +743,116 @@ final class CaptureStore: ObservableObject {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         try encoder.encode(choices).write(to: choicesURL, options: .atomic)
+    }
+
+    // MARK: Schemes
+
+    /// The choices and global style, and with `includeOriginals` the
+    /// imported originals, as a zip someone else can import and keep editing.
+    func exportScheme(name: String, note: String?, includeOriginals: Bool) throws -> URL {
+        guard let project else { throw StudioError.export("还没有导入项目。") }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd_HHmm"
+        let icons: [CaptureIcon]? = includeOriginals ? project.icons.map { icon -> CaptureIcon in
+            var icon = icon
+            icon.update = nil
+            return icon
+        } : nil
+        let scheme = CaptureScheme(name: name, note: note,
+                                   app: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+                                   wechat: project.appVersion, generated: Date(), global: global, choices: choices, icons: icons)
+        let safe = name.map { "/\\:*?\"<>|".contains($0) ? "_" : String($0) }.joined()
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SymbolStudio-exports", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let zip = try ZipWriter(url: folder.appendingPathComponent("\(safe.isEmpty ? "方案" : safe)-\(formatter.string(from: Date())).zip"))
+        do {
+            try zip.add(path: "scheme.json", data: SchemeReader.encode(scheme))
+            let files = Set((icons ?? []).flatMap { [$0.image] + [$0.plugin?.svgFile].compactMap { $0 } })
+            for file in files.sorted() {
+                guard let data = try? Data(contentsOf: imagesFolder.appendingPathComponent(file)) else { continue }
+                try zip.add(path: "icons/" + file, data: data)
+            }
+            try zip.finish()
+        } catch {
+            zip.cancel()
+            throw error
+        }
+        return zip.url
+    }
+
+    func schemeSummary(_ package: SchemePackage) -> SchemeSummary {
+        var summary = SchemeSummary()
+        let mine = Set(icons.map(\.name))
+        let carried = Set(package.icons.map(\.name))
+        summary.newIcons = carried.subtracting(mine).count
+        for (name, choice) in package.scheme.choices {
+            if !mine.contains(name) {
+                // Choices for new icons come with them; the rest are skipped.
+                if !carried.contains(name) { summary.unknown += 1 }
+            } else if let current = choices[name] {
+                if current == choice { summary.same += 1 } else { summary.conflicts += 1 }
+            } else {
+                summary.fills += 1
+            }
+        }
+        return summary
+    }
+
+    /// Applies a scheme to the project, or starts the project from the
+    /// originals it carries. Settings and global style are backed up first.
+    @discardableResult
+    func importScheme(_ package: SchemePackage, options: SchemeImportOptions) throws -> SchemeImportResult {
+        let scheme = package.scheme
+        let carried = package.icons
+        if project == nil && carried.isEmpty {
+            throw StudioError.resource("这个方案没带原图。先导入抓图 zip 或插件模板，再导入这个方案。")
+        }
+        pendingSave?.cancel()
+        backupChoices(reason: "导入方案“\(scheme.name)”之前")
+        let fm = FileManager.default
+        try fm.createDirectory(at: imagesFolder, withIntermediateDirectories: true)
+        var icons = project?.icons ?? []
+        var history = project?.history ?? []
+        var added = 0
+        if project == nil || options.addIcons {
+            let known = Set(icons.map(\.name))
+            for original in carried where !known.contains(original.name) {
+                guard let png = package.images[original.image] else { continue }
+                var icon = original
+                icon.image = Self.imageFileName(icon.name, taken: Set(icons.map(\.image)))
+                try png.write(to: imagesFolder.appendingPathComponent(icon.image), options: .atomic)
+                if let svg = original.plugin?.svgFile, let data = package.images[svg] {
+                    let file = (icon.image as NSString).deletingPathExtension + ".orig.svg"
+                    try data.write(to: imagesFolder.appendingPathComponent(file), options: .atomic)
+                    icon.plugin?.svgFile = file
+                } else {
+                    icon.plugin?.svgFile = nil
+                }
+                icon.update = nil
+                icon.importIndex = history.count + 1
+                icon.firstSeen = icon.firstSeen ?? scheme.wechat
+                icons.append(icon)
+                added += 1
+            }
+        }
+        let names = Set(icons.map(\.name))
+        var applied = 0, skipped = 0
+        for (name, choice) in scheme.choices {
+            guard names.contains(name) else { skipped += 1; continue }
+            if let current = choices[name], current == choice || !options.overwrite { continue }
+            choices[name] = choice
+            applied += 1
+        }
+        icons.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        history.append(CaptureImportRecord(version: scheme.wechat, date: Date(), added: added, updated: applied))
+        project = CaptureProject(appVersion: project?.appVersion ?? scheme.wechat, device: project?.device,
+                                 imported: Date(), icons: icons, imports: history)
+        try saveProject()
+        try saveChoices()
+        if options.useGlobal { saveGlobalNow(scheme.global) }
+        return SchemeImportResult(addedIcons: added, applied: applied, skipped: skipped)
     }
 
     // MARK: Size and position

@@ -33,7 +33,9 @@ struct CaptureView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button { pickZip() } label: { Label("导入抓图 zip…", systemImage: "square.and.arrow.down") }
+                        Button { pickZip() } label: { Label("导入别人的方案…", systemImage: "person.2") }
                         if capture.project != nil {
+                            Button { sheet = .exportScheme } label: { Label("导出方案（给别人接着改）…", systemImage: "doc.zipper") }
                             Button { path.append(CaptureRoute.compare) } label: { Label("原图对比", systemImage: "rectangle.split.2x1") }
                             Button { sheet = .global } label: { Label("全局风格…", systemImage: "paintbrush") }
                             Button { sheet = .export } label: { Label("导出替换图标…", systemImage: "shippingbox") }
@@ -58,6 +60,8 @@ struct CaptureView: View {
             case .global: GlobalStyleSheet { message in showToast(message) }
             case .export: CaptureExportSheet()
             case .backups: BackupSheet { count in showToast("已恢复 \(count) 个图标的设置") }
+            case .exportScheme: SchemeExportSheet()
+            case .importScheme(let package): SchemeImportSheet(package: package) { message in showToast(message) }
             }
         }
         .confirmationDialog("已经有一个项目了", isPresented: $askMerge, titleVisibility: .visible) {
@@ -107,7 +111,8 @@ struct CaptureView: View {
                 .multilineTextAlignment(.center)
             Button { pickZip() } label: { Label("导入抓图 zip…", systemImage: "square.and.arrow.down") }
                 .buttonStyle(.borderedProminent)
-            Text("也可以在“文件”或聊天 App 里点 zip，选“用其他应用打开”→ 符号工坊。")
+            Button { pickZip() } label: { Label("导入别人的方案…", systemImage: "person.2") }
+            Text("也可以在“文件”或聊天 App 里点 zip，选“用其他应用打开”→ 符号工坊。别人导出的方案（带原图的）也能直接导入，接着改。")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -173,6 +178,10 @@ struct CaptureView: View {
     private func receive(_ url: URL) {
         do {
             let data = try PlanFile.read(url)
+            if let package = try SchemePackage.read(data) {
+                sheet = .importScheme(package)
+                return
+            }
             pendingImport = data
             if capture.project != nil { askMerge = true } else { runImport(merge: false) }
         } catch { errorMessage = error.localizedDescription }
@@ -207,9 +216,19 @@ struct CaptureView: View {
     }
 }
 
-enum CaptureSheet: String, Identifiable {
-    case global, export, backups
-    var id: String { rawValue }
+enum CaptureSheet: Identifiable {
+    case global, export, backups, exportScheme
+    case importScheme(SchemePackage)
+
+    var id: String {
+        switch self {
+        case .global: return "global"
+        case .export: return "export"
+        case .backups: return "backups"
+        case .exportScheme: return "exportScheme"
+        case .importScheme(let package): return "importScheme-\(package.id)"
+        }
+    }
 }
 
 enum CaptureRoute: Hashable {
@@ -252,6 +271,7 @@ private struct CaptureSummary: View {
         Button(action: compare) { Label("原图对比（和微信原图放在一起看）", systemImage: "rectangle.split.2x1") }
         Button { sheet = .export } label: { Label("导出替换图标…", systemImage: "shippingbox") }
             .disabled((counts[.replaced] ?? 0) == 0)
+        Button { sheet = .exportScheme } label: { Label("导出方案（给别人接着改）…", systemImage: "doc.zipper") }
     }
 }
 
@@ -1594,7 +1614,7 @@ struct BackupSheet: View {
         NavigationStack {
             List {
                 if backups.isEmpty {
-                    Text("还没有备份。导入、清空、删除项目和一键套用改动已有设置之前，都会自动备份一次。")
+                    Text("还没有备份。导入抓图或方案、清空、删除项目和一键改动已有设置之前，都会自动备份一次。")
                         .foregroundStyle(.secondary)
                 }
                 Section {
@@ -1608,7 +1628,7 @@ struct BackupSheet: View {
                     }
                 } footer: {
                     if !backups.isEmpty {
-                        Text("恢复会把备份里每个图标的设置放回去，备份里没有的图标保持现在的样子。恢复前也会先备份一次，恢复错了还能再恢复回来。")
+                        Text("恢复会把备份里每个图标的设置和当时的全局风格放回去，备份里没有的图标保持现在的样子。恢复前也会先备份一次，恢复错了还能再恢复回来。")
                     }
                 }
             }

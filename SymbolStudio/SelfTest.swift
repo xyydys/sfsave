@@ -135,6 +135,7 @@ enum SelfTest {
         failures += await templateTest()
         failures += await sizingTest()
         failures += suggestionTest()
+        failures += await schemeTest()
         failures += presetFlatTest()
         print("SELFTEST-DONE failures=\(failures)")
         fflush(stdout)
@@ -580,6 +581,108 @@ enum SelfTest {
         try? FileManager.default.removeItem(at: root)
         try? FileManager.default.removeItem(at: store.backupsFolder)
         try? FileManager.default.removeItem(at: root.deletingLastPathComponent().appendingPathComponent("CaptureStyle.json"))
+        return failures
+    }
+
+    /// Exports a scheme in progress with and without its originals, opens it
+    /// in an empty project, then merges it into a project with settings of
+    /// its own, keeping them and then overwriting them, and undoes that.
+    private static func schemeTest() async -> Int {
+        var failures = 0
+        print("=== SCHEME export and import")
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent("SchemeSelfTest", isDirectory: true)
+        try? FileManager.default.removeItem(at: base)
+        // Each store in its own folder, so their global styles and backups stay apart.
+        func root(_ name: String) -> URL { base.appendingPathComponent(name, isDirectory: true).appendingPathComponent("Capture", isDirectory: true) }
+        func check(_ label: String, _ ok: Bool, _ detail: String) {
+            print("SCHEME-\(label) \(detail)\(ok ? "" : " FAILED")")
+            if !ok { failures += 1 }
+        }
+        guard let data = Data(base64Encoded: captureZip) else { return 1 }
+        do {
+            let a = CaptureStore(root: root("A"))
+            _ = try await a.importCapture(data, merge: false)
+            var style = GlobalStyle(look: (LookPreset.named("sunset") ?? LookPreset.all[1]).look(for: nil))
+            style.sizeMode = .optical
+            a.setGlobal(style)
+            a.fillPending()
+            guard let heart = a.icons.first(where: { $0.name == "heart_filled" }),
+                  let arrow = a.icons.first(where: { $0.name == "arrow_right_regular" }) else {
+                print("SCHEME-ERROR test icons missing")
+                return 1
+            }
+            var heartChoice = a.choice(for: heart)
+            heartChoice.symbol = "heart.circle.fill"
+            heartChoice.adjust = IconAdjust(scale: 1.2, dx: 0.05, dy: 0)
+            heartChoice.manual = true
+            a.setChoice(heartChoice, for: heart)
+            var arrowChoice = a.choice(for: arrow)
+            arrowChoice.replace = false
+            arrowChoice.manual = true
+            a.setChoice(arrowChoice, for: arrow)
+
+            let fullData = try Data(contentsOf: a.exportScheme(name: "测试方案", note: "自检", includeOriginals: true))
+            let lightData = try Data(contentsOf: a.exportScheme(name: "只有设置", note: nil, includeOriginals: false))
+            let fullPaths = try ZipReader(data: fullData).entries.map(\.path).sorted()
+            let lightPaths = try ZipReader(data: lightData).entries.map(\.path).sorted()
+            let notScheme = try SchemePackage.read(data) == nil
+            check("EXPORT", fullPaths.count == 4 && fullPaths.first == "icons/AS_Email.png" && lightPaths == ["scheme.json"] && notScheme,
+                  "full=\(fullPaths) light=\(lightPaths) captureIsScheme=\(!notScheme)")
+            guard let full = try SchemePackage.read(fullData), let light = try SchemePackage.read(lightData) else {
+                print("SCHEME-ERROR exported schemes do not read back")
+                return failures + 1
+            }
+
+            // An empty project opens the scheme with its originals.
+            let b = CaptureStore(root: root("B"))
+            let opened = try b.importScheme(full, options: SchemeImportOptions())
+            let images = b.icons.allSatisfy { b.image(for: $0) != nil }
+            check("OPEN", b.icons.count == 3 && opened.addedIcons == 3 && b.choices == a.choices && b.global == a.global && images,
+                  "icons=\(b.icons.count) applied=\(opened.applied) sameChoices=\(b.choices == a.choices) sameGlobal=\(b.global == a.global) images=\(images)")
+            if let heartB = b.icons.first(where: { $0.name == "heart_filled" }), let choiceB = b.choices["heart_filled"] {
+                let inA = a.renderReplacement(for: heart, choice: heartChoice).map { $0.drawing.bounds.applying($0.layout.transform) } ?? .null
+                let inB = b.renderReplacement(for: heartB, choice: choiceB).map { $0.drawing.bounds.applying($0.layout.transform) } ?? .null
+                check("SAME-RENDER", abs(inA.minX - inB.minX) < 0.01 && abs(inA.width - inB.width) < 0.01 && abs(inA.height - inB.height) < 0.01,
+                      "a=\(inA) b=\(inB)")
+            }
+
+            // Without originals, an empty project cannot take it.
+            let empty = CaptureStore(root: root("D"))
+            var refused = false
+            do { try empty.importScheme(light, options: SchemeImportOptions()) } catch { refused = true }
+            check("NEEDS-ORIGINALS", refused && empty.project == nil, "refused=\(refused)")
+
+            // A project with a setting of its own.
+            let c = CaptureStore(root: root("C"))
+            _ = try await c.importCapture(data, merge: false)
+            guard let heartC = c.icons.first(where: { $0.name == "heart_filled" }) else { return failures + 1 }
+            var own = c.choice(for: heartC)
+            own.replace = true
+            own.symbol = "star.fill"
+            own.manual = true
+            c.setChoice(own, for: heartC)
+            let globalC = c.global
+            let summary = c.schemeSummary(light)
+            var keep = SchemeImportOptions()
+            keep.useGlobal = false
+            let first = try c.importScheme(light, options: keep)
+            let kept = c.choices["heart_filled"] == own && c.choices["AS_Email"] == a.choices["AS_Email"]
+                && c.choices["arrow_right_regular"] == arrowChoice && c.global == globalC
+            check("MERGE-KEEP", summary.fills == 2 && summary.conflicts == 1 && summary.newIcons == 0 && first.applied == 2 && kept,
+                  "fills=\(summary.fills) conflicts=\(summary.conflicts) same=\(summary.same) applied=\(first.applied) kept=\(kept)")
+            var overwrite = SchemeImportOptions()
+            overwrite.overwrite = true
+            let second = try c.importScheme(light, options: overwrite)
+            check("MERGE-OVERWRITE", second.applied == 1 && c.choices == a.choices && c.global == a.global,
+                  "applied=\(second.applied) sameChoices=\(c.choices == a.choices) sameGlobal=\(c.global == a.global)")
+            let latest = c.backups().first
+            if let latest { try c.restore(latest) }
+            check("UNDO", c.choices["heart_filled"] == own && c.global == globalC, "backup=\(latest?.reason ?? "-")")
+        } catch {
+            print("SCHEME-ERROR \(error.localizedDescription)")
+            failures += 1
+        }
+        try? FileManager.default.removeItem(at: base)
         return failures
     }
 
