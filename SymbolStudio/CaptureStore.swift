@@ -263,6 +263,7 @@ final class CaptureStore: ObservableObject {
     let suggestions = SuggestionBook.bundled()
     let root: URL
     private let images = NSCache<NSString, UIImage>()
+    private let previews = NSCache<NSString, UIImage>()
     private var pendingSave: Task<Void, Never>?
     private var pendingStyleSave: Task<Void, Never>?
     private var opticalFactors: [WeightChoice: Double] = [:]
@@ -796,6 +797,21 @@ final class CaptureStore: ObservableObject {
         let layout = SVGWriter.layout(for: render.drawing, frame: render.frame, width: icon.canvas.width,
                                       height: icon.canvas.height, padding: 0, fit: geometry.fit, box: geometry.box)
         return (render.pdf, render.drawing, layout)
+    }
+
+    /// The replacement as exported, as an image of the whole canvas with
+    /// enough pixels for `side` points on screen. Cached.
+    func replacementPreview(for icon: CaptureIcon, choice: IconChoice, side: CGFloat, displayScale: CGFloat) -> UIImage? {
+        let look = effectiveLook(for: icon, choice: choice)
+        let ink = icon.inkBox.map { "\($0.minX),\($0.minY),\($0.width),\($0.height)" } ?? "-"
+        let key = "\(icon.name)|\(choice.symbol)|\(look.hashValue)|\(choice.adjust?.hashValue ?? 0)|\(global.sizeMode.rawValue)|\(global.share)|\(icon.canvas.width)x\(icon.canvas.height)|\(ink)|\(side)|\(displayScale)" as NSString
+        if let cached = previews.object(forKey: key) { return cached }
+        guard let output = renderReplacement(for: icon, choice: choice) else { return nil }
+        let scale = max(2, displayScale * side / max(icon.canvas.width, icon.canvas.height, 1))
+        guard let image = SymbolPipeline.rasterize(pdf: output.pdf, layout: output.layout, pixelScale: scale, background: nil)
+            .flatMap({ UIImage(data: $0, scale: scale) }) else { return nil }
+        previews.setObject(image, forKey: key)
+        return image
     }
 
     /// How much of the canvas the originals cover, middle value over the

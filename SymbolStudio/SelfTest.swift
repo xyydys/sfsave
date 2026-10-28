@@ -134,6 +134,7 @@ enum SelfTest {
         failures += await captureTest()
         failures += await templateTest()
         failures += await sizingTest()
+        failures += suggestionTest()
         failures += presetFlatTest()
         print("SELFTEST-DONE failures=\(failures)")
         fflush(stdout)
@@ -570,6 +571,39 @@ enum SelfTest {
         try? FileManager.default.removeItem(at: store.backupsFolder)
         try? FileManager.default.removeItem(at: root.deletingLastPathComponent().appendingPathComponent("CaptureStyle.json"))
         return failures
+    }
+
+    /// Draws the first suggested symbol of every bundled WeChat resource in the
+    /// default global look: each must exist and render. The drawings (cropped
+    /// to their painted area, at 64 pt) are printed for comparison sheets.
+    private static func suggestionTest() -> Int {
+        print("=== SUGGESTIONS")
+        let book = SuggestionBook.bundled()
+        let look = GlobalStyle().look
+        var drawn = Set<String>()
+        var failed: [String] = []
+        var kept = 0
+        var icons = 0
+        for name in book.items.keys.sorted() where book.items[name]?.decorative != true {
+            guard let symbol = book.symbols(for: name).first else { continue }
+            icons += 1
+            print("SUGGEST-ICON \(name) \(symbol)")
+            guard drawn.insert(symbol).inserted else { continue }
+            guard let render = SymbolPipeline.renderDrawing(name: symbol, style: look.style(pointSize: 64)) else {
+                failed.append(symbol)
+                continue
+            }
+            let bounds = render.drawing.bounds
+            let layout = SVGLayout(width: bounds.width, height: bounds.height,
+                                   transform: CGAffineTransform(translationX: -bounds.minX, y: -bounds.minY))
+            let svg = SVGWriter.svg(render.drawing, layout: layout, title: symbol, background: nil)
+            if svg.contains("<mask") || svg.contains("clip-path=") { kept += 1 }
+            print("SUGGEST-SVG \(symbol) \(Data(svg.utf8).base64EncodedString())")
+        }
+        let circle = SymbolPipeline.renderDrawing(name: "circle.fill", style: look.style(pointSize: 64))?.drawing.bounds
+        print("SUGGEST-CIRCLE \(circle.map { SVGWriter.number($0.height) } ?? "-")")
+        print("SUGGEST-DONE icons=\(icons) symbols=\(drawn.count) failed=\(failed) withMasks=\(kept)\(failed.isEmpty ? "" : " FAILED")")
+        return failed.isEmpty && circle != nil ? 0 : 1
     }
 
     /// A plugin template like the plugin exports: version 8.0.80, a new SVG

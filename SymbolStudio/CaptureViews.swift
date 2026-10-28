@@ -18,9 +18,10 @@ struct CaptureView: View {
     @State private var confirmRemove = false
     @State private var errorMessage: String?
     @State private var toast: String?
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if capture.project == nil { emptyState } else { iconList }
             }
@@ -33,6 +34,7 @@ struct CaptureView: View {
                     Menu {
                         Button { pickZip() } label: { Label("导入抓图 zip…", systemImage: "square.and.arrow.down") }
                         if capture.project != nil {
+                            Button { path.append(CaptureRoute.compare) } label: { Label("原图对比", systemImage: "rectangle.split.2x1") }
                             Button { sheet = .global } label: { Label("全局风格…", systemImage: "paintbrush") }
                             Button { sheet = .export } label: { Label("导出替换图标…", systemImage: "shippingbox") }
                             Button(role: .destructive) { confirmRemove = true } label: { Label("删除项目", systemImage: "trash") }
@@ -43,6 +45,12 @@ struct CaptureView: View {
             }
             .navigationDestination(for: String.self) { name in
                 CaptureDetailView(startName: name, names: visibleIcons.map(\.name))
+            }
+            .navigationDestination(for: CaptureRoute.self) { route in
+                switch route {
+                case .compare: CaptureCompareView()
+                case .detail(let name, let names): CaptureDetailView(startName: name, names: names)
+                }
             }
         }
         .sheet(item: $sheet) { sheet in
@@ -110,7 +118,7 @@ struct CaptureView: View {
 
     private var iconList: some View {
         List {
-            Section { CaptureSummary(sheet: $sheet) }
+            Section { CaptureSummary(sheet: $sheet) { path.append(CaptureRoute.compare) } }
             Section {
                 Picker("筛选", selection: $filter) {
                     ForEach(CaptureStore.Filter.allCases) { item in
@@ -204,9 +212,16 @@ enum CaptureSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
+enum CaptureRoute: Hashable {
+    case compare
+    /// An icon's page, stepping through `names`.
+    case detail(name: String, names: [String])
+}
+
 private struct CaptureSummary: View {
     @EnvironmentObject private var capture: CaptureStore
     @Binding var sheet: CaptureSheet?
+    let compare: () -> Void
 
     var body: some View {
         let counts = Dictionary(grouping: capture.icons, by: { capture.status(of: $0) }).mapValues(\.count)
@@ -234,6 +249,7 @@ private struct CaptureSummary: View {
         Button { sheet = .global } label: {
             Label("全局风格…（跟随 \(capture.styleCounts.global) 个，单独设置 \(capture.styleCounts.own) 个）", systemImage: "paintbrush")
         }
+        Button(action: compare) { Label("原图对比（和微信原图放在一起看）", systemImage: "rectangle.split.2x1") }
         Button { sheet = .export } label: { Label("导出替换图标…", systemImage: "shippingbox") }
             .disabled((counts[.replaced] ?? 0) == 0)
     }
@@ -260,8 +276,11 @@ struct CaptureRow: View {
         HStack(spacing: 10) {
             OriginalThumb(icon: icon, side: 40)
             Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.tertiary)
-            ReplacementThumb(choice: capture.choices[icon.name],
-                             look: capture.choices[icon.name].map { capture.effectiveLook(for: icon, choice: $0) }, side: 40)
+            if let choice = capture.choices[icon.name], choice.replace {
+                ExactReplacementThumb(icon: icon, choice: choice, side: 40)
+            } else {
+                ReplacementThumb(choice: capture.choices[icon.name], side: 40)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(icon.name).font(.subheadline.weight(.medium)).lineLimit(1)
@@ -302,20 +321,186 @@ struct OriginalThumb: View {
     let icon: CaptureIcon
     var side: CGFloat
     var dark: Bool? = nil
+    var outline = false
 
     var body: some View {
+        let dark = self.dark ?? icon.prefersDarkTile
         ZStack {
             RoundedRectangle(cornerRadius: side * 0.22, style: .continuous)
-                .fill((dark ?? icon.prefersDarkTile) ? Color(white: 0.2) : Color(white: 0.94))
-            if let image = capture.image(for: icon) {
-                Image(uiImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
-                    .padding(side * 0.12)
+                .fill(dark ? Color(white: 0.2) : Color(white: 0.94))
+            Group {
+                if let image = capture.image(for: icon) {
+                    Image(uiImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+                }
+                if outline { CanvasOutline(canvas: icon.canvas, dark: dark) }
             }
+            .padding(side * 0.12)
         }
         .frame(width: side, height: side)
+    }
+}
+
+/// The replacement exactly as exported, framed like `OriginalThumb`: the
+/// two show the same canvas at the same scale, so sizes compare directly.
+struct ExactReplacementThumb: View {
+    @EnvironmentObject private var capture: CaptureStore
+    @Environment(\.displayScale) private var displayScale
+    let icon: CaptureIcon
+    let choice: IconChoice
+    var side: CGFloat
+    var dark: Bool? = nil
+    var outline = false
+    /// The original drawn faintly underneath.
+    var overlay = false
+    @State private var image: UIImage?
+
+    var body: some View {
+        let dark = self.dark ?? icon.prefersDarkTile
+        let ink = icon.inkBox.map { "\($0.minX),\($0.minY),\($0.width),\($0.height)" } ?? "-"
+        ZStack {
+            RoundedRectangle(cornerRadius: side * 0.22, style: .continuous)
+                .fill(dark ? Color(white: 0.2) : Color(white: 0.94))
+            Group {
+                if overlay, let original = capture.image(for: icon) {
+                    Image(uiImage: original).resizable().interpolation(.high).aspectRatio(contentMode: .fit).opacity(0.35)
+                }
+                if let image {
+                    Image(uiImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
+                        .opacity(overlay ? 0.8 : 1)
+                }
+                if outline { CanvasOutline(canvas: icon.canvas, dark: dark) }
+            }
+            .padding(side * 0.12)
+        }
+        .frame(width: side, height: side)
+        .task(id: "\(icon.name)|\(choice.hashValue)|\(capture.global.hashValue)|\(icon.canvas.width)x\(icon.canvas.height)|\(ink)") {
+            // Sliders change the global style many times a second; draw once they pause.
+            if image != nil { try? await Task.sleep(nanoseconds: 150_000_000) }
+            guard !Task.isCancelled else { return }
+            image = capture.replacementPreview(for: icon, choice: choice, side: side, displayScale: displayScale)
+        }
+    }
+}
+
+/// Every WeChat original next to its SF Symbol replacement, both on the
+/// original's canvas exactly as exported, with the sizing controls at hand.
+struct CaptureCompareView: View {
+    @EnvironmentObject private var capture: CaptureStore
+    @State private var scope = Scope.replaced
+    @State private var overlay = false
+    @State private var dark = false
+
+    enum Scope: String, CaseIterable, Identifiable {
+        case replaced, suggested
+        var id: String { rawValue }
+        var title: String { self == .replaced ? "已替换的" : "加上待定的（推荐符号）" }
+    }
+
+    private struct Item: Identifiable {
+        let icon: CaptureIcon
+        let choice: IconChoice
+        var id: String { icon.name }
+    }
+
+    /// Replaced icons; with `suggested` also undecided ones that have a
+    /// suggested symbol, drawn as they would be if replaced now.
+    private var items: [Item] {
+        capture.icons.compactMap { icon in
+            if let choice = capture.choices[icon.name] { return choice.replace ? Item(icon: icon, choice: choice) : nil }
+            guard scope == .suggested, !capture.isDecorative(icon), !capture.symbols(for: icon).isEmpty else { return nil }
+            var choice = capture.choice(for: icon)
+            choice.replace = true
+            return Item(icon: icon, choice: choice)
+        }
+    }
+
+    var body: some View {
+        let items = self.items
+        let names = items.map(\.icon.name)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                controls
+                if items.isEmpty {
+                    Text(scope == .replaced ? "还没有设为替换的图标。选上面的“加上待定的”，先看推荐符号和原图的对比。" : "没有可对比的图标。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 14) {
+                    ForEach(items) { item in
+                        NavigationLink(value: CaptureRoute.detail(name: item.icon.name, names: names)) {
+                            VStack(spacing: 4) {
+                                HStack(spacing: 6) {
+                                    OriginalThumb(icon: item.icon, side: 70, dark: dark ? true : nil, outline: true)
+                                    ExactReplacementThumb(icon: item.icon, choice: item.choice, side: 70,
+                                                          dark: dark ? true : nil, outline: true, overlay: overlay)
+                                }
+                                Text(item.icon.name).font(.system(size: 10)).lineLimit(1)
+                                Text("\(item.choice.symbol) · \(item.icon.sizeText)")
+                                    .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding()
+        }
+        .navigationTitle("原图对比")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker("范围", selection: $scope) {
+                ForEach(Scope.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            SizingControls()
+            HStack(spacing: 10) {
+                Toggle(isOn: $overlay) { Label("叠加原图", systemImage: "square.on.square.dashed") }
+                Toggle(isOn: $dark) { Label("深底", systemImage: "circle.lefthalf.filled") }
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            Text("每对左边是微信原图，右边是导出的替换图：画布一样大、比例一样，虚线是画布边界。“叠加原图”把原图半透明垫在替换图下面。尺寸统一的设置和全局风格里是同一个，改了所有图标一起变；点一对进去可以换符号，或者单独微调大小和位置。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+/// The global sizing mode and canvas share, on the global style sheet and the comparison page.
+struct SizingControls: View {
+    @EnvironmentObject private var capture: CaptureStore
+
+    var body: some View {
+        Picker("尺寸统一", selection: Binding(get: { capture.global.sizeMode }, set: { mode in
+            var style = capture.global
+            style.sizeMode = mode
+            capture.setGlobal(style)
+        })) {
+            ForEach(IconSizing.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        if capture.global.sizeMode != .original {
+            LabeledContent("占画布 \(Int((capture.global.share * 100).rounded()))%") {
+                Slider(value: Binding(get: { capture.global.share }, set: { value in
+                    var style = capture.global
+                    style.share = value
+                    capture.setGlobal(style)
+                }), in: 0.5...1, step: 0.01)
+                .frame(maxWidth: 190)
+            }
+            if let original = capture.originalShare {
+                Button("按原图的平均大小（\(Int((original * 100).rounded()))%）") {
+                    var style = capture.global
+                    style.share = original
+                    capture.setGlobal(style)
+                }
+            }
+        }
     }
 }
 
@@ -1239,22 +1424,7 @@ struct GlobalStyleSheet: View {
     private var sizingSection: some View {
         let style = capture.global
         return Section {
-            Picker("方式", selection: sizingBinding) {
-                ForEach(IconSizing.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            if style.sizeMode != .original {
-                LabeledContent("占画布 \(Int((style.share * 100).rounded()))%") {
-                    Slider(value: shareBinding, in: 0.5...1, step: 0.01).frame(maxWidth: 190)
-                }
-                if let original = capture.originalShare {
-                    Button("按原图的平均大小（\(Int((original * 100).rounded()))%）") {
-                        var updated = capture.global
-                        updated.share = original
-                        capture.setGlobal(updated)
-                    }
-                }
-            }
+            SizingControls()
             pairs
             if capture.adjustedCount > 0 {
                 Button(role: .destructive) { confirmClearAdjust = true } label: {
@@ -1264,7 +1434,7 @@ struct GlobalStyleSheet: View {
         } header: {
             Text("尺寸统一")
         } footer: {
-            Text(style.sizeMode.detail + "\n窄长的画布（箭头、圆点、横条）总是对齐原图内容。尺寸统一对所有替换图标生效，单独设置风格的也一样；图标详情里还能再单独微调大小和位置。上面每对图左边是原图，右边是导出的替换图，虚线是画布边界。")
+            Text(style.sizeMode.detail + "\n窄长的画布（箭头、圆点、横条）总是对齐原图内容。尺寸统一对所有替换图标生效，单独设置风格的也一样；图标详情里还能再单独微调大小和位置。上面每对图左边是原图，右边是导出的替换图，虚线是画布边界；全部图标的对比在“逐个替换”页的“原图对比”。")
         }
     }
 
@@ -1316,10 +1486,8 @@ struct GlobalStyleSheet: View {
             guard !Task.isCancelled else { return }
             var images: [String: UIImage] = [:]
             for sample in samples {
-                guard let output = capture.renderReplacement(for: sample.icon, choice: sample.choice) else { continue }
-                let scale = max(2, displayScale * 52 / max(sample.icon.canvas.width, sample.icon.canvas.height, 1))
-                images[sample.icon.name] = SymbolPipeline.rasterize(pdf: output.pdf, layout: output.layout, pixelScale: scale, background: nil)
-                    .flatMap { UIImage(data: $0, scale: scale) }
+                images[sample.icon.name] = capture.replacementPreview(for: sample.icon, choice: sample.choice,
+                                                                      side: 52, displayScale: displayScale)
                 await Task.yield()
                 if Task.isCancelled { return }
             }
@@ -1339,22 +1507,6 @@ struct GlobalStyleSheet: View {
             .padding(5)
         }
         .frame(width: 62, height: 62)
-    }
-
-    private var sizingBinding: Binding<IconSizing> {
-        Binding(get: { capture.global.sizeMode }, set: { mode in
-            var style = capture.global
-            style.sizeMode = mode
-            capture.setGlobal(style)
-        })
-    }
-
-    private var shareBinding: Binding<Double> {
-        Binding(get: { capture.global.share }, set: { value in
-            var style = capture.global
-            style.share = value
-            capture.setGlobal(style)
-        })
     }
 
     private struct Sample: Identifiable {
