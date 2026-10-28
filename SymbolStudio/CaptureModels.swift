@@ -159,7 +159,7 @@ struct GlobalStyle: Codable, Hashable {
 
     /// How every replacement is sized; applies to icons with their own look too.
     var sizeMode: IconSizing {
-        get { sizing ?? .optical }
+        get { sizing ?? .original }
         set { sizing = newValue }
     }
 
@@ -172,32 +172,34 @@ struct GlobalStyle: Codable, Hashable {
 
 /// Where a replacement goes inside the original's canvas.
 enum IconSizing: String, Codable, CaseIterable, Identifiable {
+    /// Each symbol covers as much area as the original's visible pixels, on
+    /// the same center. WeChat's own icons are already drawn at matching
+    /// visual sizes, so following each one keeps the set consistent.
+    case original
     /// Every symbol at the same point size for its canvas, like letters set
     /// in one font size: strokes match across the whole set.
     case optical
     /// Every symbol scaled to fill the same square in the middle of the canvas.
     case uniform
-    /// Each symbol scaled into the area the original's pixels cover.
-    case original
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .original: return "跟原图一样大"
         case .optical: return "统一字号"
         case .uniform: return "统一留白"
-        case .original: return "对齐原图内容"
         }
     }
 
     var detail: String {
         switch self {
-        case .optical:
-            return "同样大的画布里，所有符号用同一个字号，笔画粗细一致，圆形符号正好占画布的设定比例。宽的符号放不下时才缩小。"
-        case .uniform:
-            return "每个符号都缩放到画布中间同样大小的正方形里，四周留白一样，但笔画粗细会随符号形状变。"
         case .original:
-            return "每个符号缩放到原图有颜色的区域里。原图留白不统一时，替换后也会大小不一。"
+            return "推荐。每个替换图放在原图有颜色的区域上，面积和原图一样、中心对齐；形状不同时（比如原图偏方、符号偏宽），符号可以比原图稍宽或稍高，不会被硬塞进原图的框里变小。微信自己的图标已经按视觉大小设计好，跟着原图走最接近原来的样子。"
+        case .optical:
+            return "同样大的画布里，所有符号用同一个字号，笔画粗细一致，圆形符号正好占画布的设定比例。宽的符号放不下时才缩小。和微信原图的大小会有出入。"
+        case .uniform:
+            return "每个符号都缩放到画布中间同样大小的正方形里，四周留白一样，但笔画粗细会随符号形状变。和微信原图的大小会有出入。"
         }
     }
 }

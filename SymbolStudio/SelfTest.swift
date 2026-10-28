@@ -461,7 +461,10 @@ enum SelfTest {
         }
         do {
             _ = try await store.importCapture(data, merge: false)
-            store.setGlobal(GlobalStyle())
+            check("DEFAULT", GlobalStyle().sizeMode == .original, GlobalStyle().sizeMode.rawValue)
+            var opticalStyle = GlobalStyle()
+            opticalStyle.sizeMode = .optical
+            store.setGlobal(opticalStyle)
             store.fillPending()
             guard let heart = store.icons.first(where: { $0.name == "heart_filled" }),
                   let email = store.icons.first(where: { $0.name == "AS_Email" }),
@@ -500,25 +503,28 @@ enum SelfTest {
             check("PLUS", plusRect.height < round.height - 1, text(plusRect))
 
             // The exported plan puts every icon where the app does.
-            let options = CaptureExportOptions()
-            let plan = store.resolvedPlan(options)
-            let reread = try IconPlan.decode(store.planJSON(options)).resolve()
-            var planOK = reread.errorCount == 0 && reread.icons.count == plan.icons.count
-            for icon in reread.icons {
-                guard let original = store.icons.first(where: { $0.name == icon.names[0] }),
-                      let choice = store.choices[original.name],
-                      let render = SymbolPipeline.renderDrawing(name: icon.symbol, style: icon.style(for: .light)) else { planOK = false; continue }
-                let layout = SVGWriter.layout(for: render.drawing, frame: render.frame, width: icon.canvas.width,
-                                              height: icon.canvas.height, padding: icon.padding, fit: icon.fit, box: icon.box)
-                let fromPlan = render.drawing.bounds.applying(layout.transform)
-                let inApp = rect(store.renderReplacement(for: original, choice: choice))
-                let same = abs(fromPlan.minX - inApp.minX) < 0.1 && abs(fromPlan.minY - inApp.minY) < 0.1
-                    && abs(fromPlan.width - inApp.width) < 0.1 && abs(fromPlan.height - inApp.height) < 0.1
-                print("SIZING-PLAN \(original.name) fit=\(icon.fit.rawValue) pointSize=\(SVGWriter.number(icon.pointSize)) plan=\(text(fromPlan)) app=\(text(inApp))\(same ? "" : " FAILED")")
-                if !same { planOK = false }
+            func checkPlan() throws {
+                let options = CaptureExportOptions()
+                let plan = store.resolvedPlan(options)
+                let reread = try IconPlan.decode(store.planJSON(options)).resolve()
+                var planOK = reread.errorCount == 0 && reread.icons.count == plan.icons.count
+                for icon in reread.icons {
+                    guard let original = store.icons.first(where: { $0.name == icon.names[0] }),
+                          let choice = store.choices[original.name],
+                          let render = SymbolPipeline.renderDrawing(name: icon.symbol, style: icon.style(for: .light)) else { planOK = false; continue }
+                    let layout = SVGWriter.layout(for: render.drawing, frame: render.frame, width: icon.canvas.width,
+                                                  height: icon.canvas.height, padding: icon.padding, fit: icon.fit, box: icon.box)
+                    let fromPlan = render.drawing.bounds.applying(layout.transform)
+                    let inApp = rect(store.renderReplacement(for: original, choice: choice))
+                    let same = abs(fromPlan.minX - inApp.minX) < 0.1 && abs(fromPlan.minY - inApp.minY) < 0.1
+                        && abs(fromPlan.width - inApp.width) < 0.1 && abs(fromPlan.height - inApp.height) < 0.1
+                    print("SIZING-PLAN \(store.global.sizeMode.rawValue) \(original.name) fit=\(icon.fit.rawValue) pointSize=\(SVGWriter.number(icon.pointSize)) plan=\(text(fromPlan)) app=\(text(inApp))\(same ? "" : " FAILED")")
+                    if !same { planOK = false }
+                }
+                for issue in reread.issues { print("SIZING-JSON-ISSUE \(issue.severity) \(issue.icon ?? "-"): \(issue.message)") }
+                if !planOK { failures += 1 }
             }
-            for issue in reread.issues { print("SIZING-JSON-ISSUE \(issue.severity) \(issue.icon ?? "-"): \(issue.message)") }
-            if !planOK { failures += 1 }
+            try checkPlan()
 
             var uniform = store.global
             uniform.sizeMode = .uniform
@@ -532,11 +538,15 @@ enum SelfTest {
             var original = store.global
             original.sizeMode = .original
             store.setGlobal(original)
+            // The same area as the original's visible pixels, on its center, inside the canvas.
             let ink = heart.inkBox ?? .null
             let fitted = rect(store.renderReplacement(for: heart, choice: circle))
+            let wideFitted = rect(store.renderReplacement(for: heart, choice: wide))
             check("ORIGINAL", abs(fitted.midX - ink.midX) < 0.05 && abs(fitted.midY - ink.midY) < 0.05
-                    && abs(min(ink.width / fitted.width, ink.height / fitted.height) - 1) < 0.01,
-                  "ink=\(text(ink)) circle=\(text(fitted))")
+                    && abs((fitted.width * fitted.height) / (ink.width * ink.height) - 1) < 0.02
+                    && wideFitted.minX >= -0.05 && wideFitted.maxX <= 24.05 && wideFitted.width > ink.width,
+                  "ink=\(text(ink)) circle=\(text(fitted)) wide=\(text(wideFitted))")
+            try checkPlan()
 
             // A sheet of symbols in each mode, for looking at.
             for mode in IconSizing.allCases {

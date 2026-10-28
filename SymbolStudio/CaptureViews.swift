@@ -758,7 +758,7 @@ struct CaptureDetailView: View {
     private func adjustSection(_ icon: CaptureIcon, choice: IconChoice, look: IconLook) -> some View {
         let geometry = capture.geometry(for: icon, choice: choice, look: look)
         let adjust = choice.adjust ?? IconAdjust()
-        let slim: String = geometry.sizing != capture.global.sizeMode ? "这个素材的画布是窄长的（箭头、圆点一类），所以按原图内容的位置放。" : ""
+        let slim: String = geometry.sizing != capture.global.sizeMode ? "这个素材的画布是窄长的（箭头、圆点一类），所以跟原图一样大。" : ""
         return Section {
             LabeledContent("大小 \(Int((adjust.scale * 100).rounded()))%") {
                 Slider(value: adjustBinding(icon, \.scale), in: 0.5...1.5, step: 0.01).frame(maxWidth: 190)
@@ -1434,7 +1434,7 @@ struct GlobalStyleSheet: View {
         } header: {
             Text("尺寸统一")
         } footer: {
-            Text(style.sizeMode.detail + "\n窄长的画布（箭头、圆点、横条）总是对齐原图内容。尺寸统一对所有替换图标生效，单独设置风格的也一样；图标详情里还能再单独微调大小和位置。上面每对图左边是原图，右边是导出的替换图，虚线是画布边界；全部图标的对比在“逐个替换”页的“原图对比”。")
+            Text(style.sizeMode.detail + "\n窄长的画布（箭头、圆点、横条）总是跟原图一样大。尺寸统一对所有替换图标生效，单独设置风格的也一样；图标详情里还能再单独微调大小和位置。上面每对图左边是原图，右边是导出的替换图，虚线是画布边界；全部图标的对比在“逐个替换”页的“原图对比”。")
         }
     }
 

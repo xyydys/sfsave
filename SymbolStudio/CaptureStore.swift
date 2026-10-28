@@ -267,6 +267,8 @@ final class CaptureStore: ObservableObject {
     private var pendingSave: Task<Void, Never>?
     private var pendingStyleSave: Task<Void, Never>?
     private var opticalFactors: [WeightChoice: Double] = [:]
+    /// Painted size of a symbol drawn at 64 pt, by symbol and look.
+    private var contentSizes: [String: CGSize] = [:]
 
     init(root: URL? = nil) {
         self.root = root ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -737,6 +739,15 @@ final class CaptureStore: ObservableObject {
     /// always follow the original's visible area.
     static let squareish: ClosedRange<CGFloat> = 0.75...1.34
 
+    /// The sizing used for this icon: slim canvases always follow the original.
+    func sizing(for icon: CaptureIcon) -> IconSizing {
+        let mode = global.sizeMode
+        if mode != .original, icon.inkBox != nil, !Self.squareish.contains(icon.canvas.width / max(icon.canvas.height, 0.001)) {
+            return .original
+        }
+        return mode
+    }
+
     /// Where the replacement goes inside the canvas: the global sizing,
     /// then the icon's own nudge.
     func geometry(for icon: CaptureIcon, choice: IconChoice, look: IconLook) -> IconGeometry {
@@ -747,17 +758,26 @@ final class CaptureStore: ObservableObject {
         func centered(_ width: CGFloat, _ height: CGFloat, at center: CGPoint) -> CGRect {
             CGRect(x: center.x + shift.x - width / 2, y: center.y + shift.y - height / 2, width: width, height: height)
         }
-        var sizing = global.sizeMode
-        if sizing != .original, icon.inkBox != nil, !Self.squareish.contains(canvas.width / max(canvas.height, 0.001)) {
-            sizing = .original
-        }
+        let sizing = sizing(for: icon)
         let middle = CGPoint(x: canvas.midX, y: canvas.midY)
         let side = min(canvas.width, canvas.height) * CGFloat(global.share) * scale
         switch sizing {
         case .original:
             let base = icon.inkBox ?? canvas.insetBy(dx: canvas.width * 0.1, dy: canvas.height * 0.1)
+            let center = CGPoint(x: base.midX, y: base.midY)
+            guard let content = contentSize(symbol: choice.symbol, look: look), content.width > 0, content.height > 0 else {
+                return IconGeometry(pointSize: 64, fit: .contain, box: centered(base.width * scale, base.height * scale, at: center),
+                                    sizing: .original)
+            }
+            // The same area as the original's visible pixels, so a symbol of
+            // another shape is not shrunk to fit inside the original's box;
+            // it still stays inside the canvas.
+            var fit = sqrt(base.width * base.height / (content.width * content.height))
+            fit = min(fit, 2 * min(center.x, canvas.width - center.x) / content.width,
+                      2 * min(center.y, canvas.height - center.y) / content.height)
+            fit = max(fit, min(base.width / content.width, base.height / content.height))
             return IconGeometry(pointSize: 64, fit: .contain,
-                                box: centered(base.width * scale, base.height * scale, at: CGPoint(x: base.midX, y: base.midY)),
+                                box: centered(content.width * fit * scale, content.height * fit * scale, at: center),
                                 sizing: .original)
         case .uniform:
             return IconGeometry(pointSize: 64, fit: .contain, box: centered(side, side, at: middle), sizing: .uniform)
@@ -769,6 +789,22 @@ final class CaptureStore: ObservableObject {
             return IconGeometry(pointSize: min(max(pointSize, 4), 512), fit: .natural,
                                 box: centered(canvas.width * limit, canvas.height * limit, at: middle), sizing: .optical)
         }
+    }
+
+    /// The painted size of the symbol drawn in `look` at 64 pt. Cached;
+    /// `renderReplacement` fills the cache from the drawing it makes anyway.
+    private func contentSize(symbol: String, look: IconLook) -> CGSize? {
+        let key = Self.contentKey(symbol, look)
+        if let known = contentSizes[key] { return known }
+        guard let render = SymbolPipeline.renderDrawing(name: symbol, style: look.style(pointSize: 64)) else { return nil }
+        let size = render.drawing.bounds.size
+        contentSizes[key] = size
+        return size
+    }
+
+    private static func contentKey(_ symbol: String, _ look: IconLook) -> String {
+        let badge = look.badge.map { "\($0.shape.rawValue)\($0.glyphScale)" } ?? "-"
+        return "\(symbol)|\(look.mode.rawValue)|\(look.weight.rawValue)|\(look.gradientRendering)|\(badge)"
     }
 
     /// Point size per point of height of an SF Symbols circle at this
@@ -790,10 +826,14 @@ final class CaptureStore: ObservableObject {
     /// The replacement drawn and placed the way every export does it.
     func renderReplacement(for icon: CaptureIcon, choice: IconChoice) -> (pdf: Data, drawing: VectorDrawing, layout: SVGLayout)? {
         let look = effectiveLook(for: icon, choice: choice)
-        let geometry = geometry(for: icon, choice: choice, look: look)
-        guard let render = SymbolPipeline.renderDrawing(name: choice.symbol, style: look.style(pointSize: geometry.pointSize)) else {
+        // Only `optical` draws at another size than 64 pt; the other modes
+        // measure the 64 pt drawing, so draw it first and keep its size.
+        let pointSize = sizing(for: icon) == .optical ? geometry(for: icon, choice: choice, look: look).pointSize : 64
+        guard let render = SymbolPipeline.renderDrawing(name: choice.symbol, style: look.style(pointSize: pointSize)) else {
             return nil
         }
+        if pointSize == 64 { contentSizes[Self.contentKey(choice.symbol, look)] = render.drawing.bounds.size }
+        let geometry = geometry(for: icon, choice: choice, look: look)
         let layout = SVGWriter.layout(for: render.drawing, frame: render.frame, width: icon.canvas.width,
                                       height: icon.canvas.height, padding: 0, fit: geometry.fit, box: geometry.box)
         return (render.pdf, render.drawing, layout)
